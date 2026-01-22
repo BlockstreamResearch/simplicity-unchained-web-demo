@@ -1,8 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { highlightSimplicitySyntax } from '@/utils/syntaxHighlighter';
 import { useApp } from '@/contexts/AppContext';
 import { PresetDropdown } from './PresetDropdown';
@@ -14,6 +12,49 @@ const PRESETS = [
   { fileName: 'sig_verify_with_pubkey_from_script.simf', label: 'Sig Verify With Pubkey From Script' },
 ];
 
+interface WitnessEntry {
+  id: string;
+  name: string;
+  value: string;
+  type: string;
+}
+
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 9);
+}
+
+function witnessEntriesToJson(entries: WitnessEntry[]): string {
+  const obj: Record<string, { value: string; type: string }> = {};
+  for (const entry of entries) {
+    if (entry.name.trim()) {
+      obj[entry.name] = { value: entry.value, type: entry.type };
+    }
+  }
+  return JSON.stringify(obj, null, 2);
+}
+
+function jsonToWitnessEntries(json: string): WitnessEntry[] {
+  try {
+    const parsed = JSON.parse(json);
+    return Object.entries(parsed).map(([name, data]) => ({
+      id: generateId(),
+      name,
+      value: (data as { value: string; type: string }).value || '',
+      type: (data as { value: string; type: string }).type || 'Signature',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function normalizeJson(json: string): string {
+  try {
+    return JSON.stringify(JSON.parse(json));
+  } catch {
+    return json;
+  }
+}
+
 export function SimplicityProgram() {
   const { state, updateSimplicityProgram, updateWitProgram, saveSimplicityProgram, addLog, showNotification } = useApp();
   const [activeTab, setActiveTab] = useState<'simf' | 'wit'>('simf');
@@ -24,22 +65,72 @@ export function SimplicityProgram() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [includeWitness, setIncludeWitness] = useState(true);
+  const [witnessEntries, setWitnessEntries] = useState<WitnessEntry[]>(() => jsonToWitnessEntries(wit));
+  const isInternalUpdate = useRef(false);
+  const lastExternalWit = useRef(wit);
 
-  const activeContent = activeTab === 'simf' ? code : wit;
-  const lineCount = Math.max(12, activeContent.split('\n').length);
-  
-  const highlightedCode = useMemo(() => {
-    if (activeTab === 'wit') {
-      // For wit (JSON), use basic JSON formatting
-      try {
-        const parsed = JSON.parse(wit);
-        return JSON.stringify(parsed, null, 2);
-      } catch {
-        return wit;
-      }
+  // Sync witness entries from context only when wit changes externally (e.g., preset loaded)
+  useEffect(() => {
+    if (isInternalUpdate.current) {
+      isInternalUpdate.current = false;
+      return;
     }
+    // Only update if wit actually changed from external source
+    if (wit !== lastExternalWit.current) {
+      lastExternalWit.current = wit;
+      const entriesFromJson = jsonToWitnessEntries(wit);
+      setWitnessEntries(entriesFromJson);
+    }
+  }, [wit]);
+
+  // Update context when witness entries change
+  const updateWitnessEntry = (id: string, field: keyof WitnessEntry, value: string) => {
+    setWitnessEntries(prev => {
+      const updated = prev.map(entry =>
+        entry.id === id ? { ...entry, [field]: value } : entry
+      );
+      const json = witnessEntriesToJson(updated);
+      // Only update context if JSON content actually changed (ignoring formatting)
+      if (normalizeJson(json) !== normalizeJson(lastExternalWit.current)) {
+        isInternalUpdate.current = true;
+        lastExternalWit.current = json;
+        updateWitProgram(json);
+      }
+      return updated;
+    });
+  };
+
+  const addWitnessEntry = () => {
+    setWitnessEntries(prev => {
+      const updated = [...prev, { id: generateId(), name: '', value: '', type: 'Signature' }];
+      const json = witnessEntriesToJson(updated);
+      if (normalizeJson(json) !== normalizeJson(lastExternalWit.current)) {
+        isInternalUpdate.current = true;
+        lastExternalWit.current = json;
+        updateWitProgram(json);
+      }
+      return updated;
+    });
+  };
+
+  const removeWitnessEntry = (id: string) => {
+    setWitnessEntries(prev => {
+      const updated = prev.filter(entry => entry.id !== id);
+      const json = witnessEntriesToJson(updated);
+      if (normalizeJson(json) !== normalizeJson(lastExternalWit.current)) {
+        isInternalUpdate.current = true;
+        lastExternalWit.current = json;
+        updateWitProgram(json);
+      }
+      return updated;
+    });
+  };
+
+  const lineCount = Math.max(12, code.split('\n').length);
+
+  const highlightedCode = useMemo(() => {
     return highlightSimplicitySyntax(code);
-  }, [code, wit, activeTab]);
+  }, [code]);
 
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
     const scrollTop = e.currentTarget.scrollTop;
@@ -126,7 +217,7 @@ export function SimplicityProgram() {
         </div>
         <PresetDropdown
           presets={PRESETS}
-          onSelect={(simfContent: string, witContent?: string) => {
+          onSelect={(simfContent: string, _presetLabel?: string, witContent?: string) => {
             updateSimplicityProgram(simfContent);
             if (witContent !== undefined) {
               updateWitProgram(witContent);
@@ -163,79 +254,100 @@ export function SimplicityProgram() {
       </div>
       
       <div className="space-y-4">
-        <div className="relative flex border border-zinc-700 bg-zinc-950 max-h-[400px]">
-          <div
-            ref={lineNumbersRef}
-            className="border-r border-zinc-800 bg-zinc-900/50 px-4 py-3 font-mono text-xs text-zinc-500 select-none overflow-y-hidden"
-            style={{ maxHeight: '400px' }}
-          >
-            <div>
-              {Array.from({ length: lineCount }, (_, i) => (
-                <div key={i} className="h-[24px] leading-[24px] text-right flex-shrink-0">
-                  {i + 1}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="flex-1 relative overflow-hidden">
+        {activeTab === 'simf' ? (
+          <div className="relative flex border border-zinc-700 bg-zinc-950 max-h-[400px]">
             <div
-              ref={displayRef}
-              className="absolute inset-0 px-4 py-3 font-mono text-sm leading-[24px] overflow-hidden pointer-events-none"
+              ref={lineNumbersRef}
+              className="border-r border-zinc-800 bg-zinc-900/50 px-4 py-3 font-mono text-xs text-zinc-500 select-none overflow-y-hidden"
+              style={{ maxHeight: '400px' }}
             >
-              {activeContent ? (
-                activeTab === 'wit' ? (
-                  <SyntaxHighlighter
-                    language="json"
-                    style={vscDarkPlus}
-                    customStyle={{
-                      margin: 0,
-                      padding: 0,
-                      background: 'transparent',
-                      fontSize: '14px',
-                      lineHeight: '24px',
-                    }}
-                    codeTagProps={{
-                      style: {
-                        fontFamily: 'inherit',
-                      }
-                    }}
-                  >
-                    {wit}
-                  </SyntaxHighlighter>
-                ) : (
+              <div>
+                {Array.from({ length: lineCount }, (_, i) => (
+                  <div key={i} className="h-[24px] leading-[24px] text-right flex-shrink-0">
+                    {i + 1}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 relative overflow-hidden">
+              <div
+                ref={displayRef}
+                className="absolute inset-0 px-4 py-3 font-mono text-sm leading-[24px] overflow-hidden pointer-events-none"
+              >
+                {code ? (
                   <pre className="leading-[24px] whitespace-pre">
                     {highlightedCode}
                   </pre>
-                )
-              ) : (
-                <span className="text-zinc-600">
-                  {activeTab === 'simf'
-                    ? '// Enter your Simplicity program code here'
-                    : '// Enter witness JSON here (optional)'}
-                </span>
-              )}
+                ) : (
+                  <span className="text-zinc-600">
+                    // Enter your Simplicity program code here
+                  </span>
+                )}
+              </div>
+              <textarea
+                ref={textareaRef}
+                className="absolute inset-0 w-full h-full border-0 bg-transparent px-4 py-3 font-mono text-sm text-transparent leading-[24px] caret-[#aae1ff] focus:outline-none resize-none whitespace-pre overflow-auto scrollbar-hide"
+                style={{
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                }}
+                value={code}
+                onChange={(e) => updateSimplicityProgram(e.target.value)}
+                onScroll={handleScroll}
+                spellCheck={false}
+                wrap="off"
+              />
             </div>
-            <textarea
-              ref={textareaRef}
-              className="absolute inset-0 w-full h-full border-0 bg-transparent px-4 py-3 font-mono text-sm text-transparent leading-[24px] caret-[#aae1ff] focus:outline-none resize-none whitespace-pre overflow-auto scrollbar-hide"
-              style={{
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
-              }}
-              value={activeContent}
-              onChange={(e) => {
-                if (activeTab === 'simf') {
-                  updateSimplicityProgram(e.target.value);
-                } else {
-                  updateWitProgram(e.target.value);
-                }
-              }}
-              onScroll={handleScroll}
-              spellCheck={false}
-              wrap="off"
-            />
           </div>
-        </div>
+        ) : (
+          <div className="space-y-3">
+            {witnessEntries.map((entry) => (
+              <div key={entry.id} className="flex items-start gap-2">
+                <div className="flex-1 grid grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={entry.name}
+                    onChange={(e) => updateWitnessEntry(entry.id, 'name', e.target.value)}
+                    placeholder="Name (e.g., SIGNATURE)"
+                    className="border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                  />
+                  <input
+                    type="text"
+                    value={entry.value}
+                    onChange={(e) => updateWitnessEntry(entry.id, 'value', e.target.value)}
+                    placeholder="Value (e.g., 0x...)"
+                    className="border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                  />
+                  <input
+                    type="text"
+                    value={entry.type}
+                    onChange={(e) => updateWitnessEntry(entry.id, 'type', e.target.value)}
+                    placeholder="Type (e.g., Signature)"
+                    className="border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <button
+                  onClick={() => removeWitnessEntry(entry.id)}
+                  className="p-2 text-zinc-500 hover:text-red-400 transition-colors"
+                  title="Remove entry"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={addWitnessEntry}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-400 hover:text-emerald-400 border border-dashed border-zinc-700 hover:border-emerald-500 transition-colors w-full justify-center"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add witness entry
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-4">
           <button 
             onClick={handleCompileProgram}

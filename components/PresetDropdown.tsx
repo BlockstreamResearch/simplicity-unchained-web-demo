@@ -10,7 +10,7 @@ interface Preset {
 
 interface PresetDropdownProps {
   presets: Preset[];
-  onSelect: (simfContent: string, witContent?: string) => void;
+  onSelect: (simfContent: string, presetLabelOrWitContent?: string, witContent?: string) => void;
   presetPath: string;
   disabled?: boolean;
 }
@@ -20,7 +20,7 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
   const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handlePresetSelect = async (fileName: string) => {
+  const handlePresetSelect = async (fileName: string, presetLabel: string) => {
     setIsDropdownOpen(false);
     setIsLoading(true);
     try {
@@ -28,12 +28,12 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
       const response = await fetch(`${presetPath}/${fileName}`);
       if (response.ok) {
         const simfContent = await response.text();
-        
+
         // Try to load the corresponding wit file
         const baseName = fileName.replace('.simf', '');
         const witFileName = `${baseName}.wit`;
         let witContent: string | undefined = undefined;
-        
+
         try {
           const witResponse = await fetch(`${presetPath}/${witFileName}`);
           if (witResponse.ok) {
@@ -43,8 +43,8 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
           // It's okay if wit file doesn't exist
           console.log(`No wit file found for ${fileName}`);
         }
-        
-        onSelect(simfContent, witContent);
+
+        onSelect(simfContent, presetLabel, witContent);
       }
     } catch (error) {
       console.error('Error loading preset:', error);
@@ -93,7 +93,7 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
               }`}
             >
               <button
-                onClick={() => handlePresetSelect(preset.fileName)}
+                onClick={() => handlePresetSelect(preset.fileName, preset.label)}
                 className="w-full px-4 py-2 text-left text-sm font-bold text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors flex items-center justify-between"
               >
                 <span>{index + 1}. {preset.label}</span>
