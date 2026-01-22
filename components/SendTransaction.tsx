@@ -92,7 +92,7 @@ export function SendTransaction() {
 
   const handleSendTransaction = async () => {
     if (!canSendTransaction()) {
-      showNotification("Please save Simplicity Program and Bitcoin Script first");
+      showNotification(getDisabledReason() || "Please compile Simplicity Program (with witness included) and Bitcoin Script first");
       return;
     }
 
@@ -195,6 +195,14 @@ export function SendTransaction() {
   };
 
   const isDisabled = !canSendTransaction();
+
+  const getDisabledReason = () => {
+    const missing: string[] = [];
+    if (!state.savedSimplicityProgram) missing.push("Simplicity Program not compiled");
+    if (!state.savedBitcoinScript) missing.push("Bitcoin Script not compiled");
+    if (!state.compiledWithWitnessForTransaction) missing.push("Witness not included in compilation");
+    return missing.join(", ");
+  };
 
   return (
     <section className="border border-zinc-800 bg-zinc-900 p-6">
@@ -314,7 +322,7 @@ export function SendTransaction() {
         </button>
         {isDisabled && (
           <p className="text-xs text-zinc-500 italic">
-            Please save Simplicity Program and Bitcoin Script first
+            {getDisabledReason()}
           </p>
         )}
       </div>
