@@ -172,6 +172,7 @@ export function SimplicityProgram() {
         script: code,
         include_debug: false,
         witness: witnessData,
+        environment: state.network,
       });
       
       console.log("Compiled Program (base64):", response.program_base64);
@@ -182,6 +183,7 @@ export function SimplicityProgram() {
       try {
         const tweakResponse = await proxyApi.tweak({
           program: response.program_base64,
+          jet_env: state.network,
         });
         
         console.log("Tweaked Public Key:", tweakResponse.tweaked_public_key_hex);

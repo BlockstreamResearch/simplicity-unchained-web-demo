@@ -105,56 +105,111 @@ export function SendTransaction() {
     setIsSending(true);
 
     try {
-      // Step 1: Create PSET
-      const createPsetResponse = await proxyApi.createPset({
-        inputs: [`${state.inputTransactionHash}:${state.inputIndex}`],
-        outputs: [
-          `${state.compiledAddress}:99000`,
-          "fee:1000"
-        ],
-        asset_id: null,
-        network: API_CONFIG.NETWORK,
-      });
-      addLog(`PSET created with ${createPsetResponse.inputs} input(s) and ${createPsetResponse.outputs} output(s)`);
-      console.log("Created PSET:", createPsetResponse.pset);
-
-      // Step 2: Sign with Simplicity service
-      const simplicitySignResponse = await proxyApi.simplicitySignPset({
-        pset_hex: createPsetResponse.pset,
-        input_index: 0,
-        redeem_script_hex: state.compiledHex,
-        program: state.compiledProgramBase64,
-        witness: state.compiledWitnessBase64,
-      });
-      addLog(`Simplicity signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
-      console.log("Simplicity signed PSET:", simplicitySignResponse.pset_hex);
-
-      // Step 3: Sign with cosign key via proxy
-      const proxySignResponse = await proxyApi.signPset({
-        pset_hex: simplicitySignResponse.pset_hex,
-        secret_key_hex: state.cosignSecretKey,
-        input_index: 0,
-        redeem_script_hex: state.compiledHex,
-      });
-      addLog(`Cosign signature added (${proxySignResponse.partial_sigs_count} partial signature(s))`);
-      console.log("Fully signed PSET:", proxySignResponse.pset);
-
-      // Step 4: Finalize PSET
-      const finalizeResponse = await proxyApi.finalizePset({
-        pset_hex: proxySignResponse.pset,
-      });
-      console.log("Final transaction hex:", finalizeResponse.transaction_hex);
-
-      // Step 5: Broadcast transaction
-      const broadcastResponse = await proxyApi.broadcastTransaction({
-        transaction_hex: finalizeResponse.transaction_hex,
-      });
+      const isBitcoin = state.network === "bitcoin";
       
-      addLog("Transaction broadcast successfully!");
-      addLog(`View transaction: ${broadcastResponse.explorer_url}`);
-      showNotification("Transaction sent successfully!");
-      
-      console.log("Broadcast result:", broadcastResponse);
+      if (isBitcoin) {
+        // Bitcoin PSBT flow
+        // Step 1: Create PSBT
+        const createPsbtResponse = await proxyApi.createPsbt({
+          inputs: [`${state.inputTransactionHash}:${state.inputIndex}`],
+          outputs: [
+            `${state.compiledAddress}:4000`,
+          ],
+          network: API_CONFIG.BITCOIN_NETWORK,
+        });
+        addLog(`PSBT created with ${createPsbtResponse.inputs} input(s) and ${createPsbtResponse.outputs} output(s)`);
+        console.log("Created PSBT:", createPsbtResponse.psbt);
+
+        // Step 2: Sign with Simplicity service
+        const simplicitySignResponse = await proxyApi.simplicitySignPsbt({
+          psbt_hex: createPsbtResponse.psbt,
+          input_index: 0,
+          redeem_script_hex: state.compiledHex,
+          program: state.compiledProgramBase64,
+          witness: state.compiledWitnessBase64,
+        });
+        addLog(`Simplicity signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
+        console.log("Simplicity signed PSBT:", simplicitySignResponse.psbt_hex);
+
+        // Step 3: Sign with cosign key via proxy
+        const proxySignResponse = await proxyApi.signPsbt({
+          psbt_hex: simplicitySignResponse.psbt_hex,
+          secret_key_hex: state.cosignSecretKey,
+          input_index: 0,
+          redeem_script_hex: state.compiledHex,
+        });
+        addLog(`Cosign signature added (${proxySignResponse.partial_sigs_count} partial signature(s))`);
+        console.log("Fully signed PSBT:", proxySignResponse.psbt);
+
+        // Step 4: Finalize PSBT
+        const finalizeResponse = await proxyApi.finalizePsbt({
+          psbt_hex: proxySignResponse.psbt,
+        });
+        console.log("Final transaction hex:", finalizeResponse.transaction_hex);
+
+        // Step 5: Broadcast transaction
+        const broadcastResponse = await proxyApi.broadcastTransaction({
+          transaction_hex: finalizeResponse.transaction_hex,
+        }, "bitcoin");
+        
+        addLog("Transaction broadcast successfully!");
+        addLog(`View transaction: ${broadcastResponse.explorer_url}`);
+        showNotification("Transaction sent successfully!");
+        
+        console.log("Broadcast result:", broadcastResponse);
+      } else {
+        // Elements PSET flow
+        // Step 1: Create PSET
+        const createPsetResponse = await proxyApi.createPset({
+          inputs: [`${state.inputTransactionHash}:${state.inputIndex}`],
+          outputs: [
+            `${state.compiledAddress}:99000`,
+            "fee:1000"
+          ],
+          asset_id: null,
+          network: API_CONFIG.NETWORK,
+        });
+        addLog(`PSET created with ${createPsetResponse.inputs} input(s) and ${createPsetResponse.outputs} output(s)`);
+        console.log("Created PSET:", createPsetResponse.pset);
+
+        // Step 2: Sign with Simplicity service
+        const simplicitySignResponse = await proxyApi.simplicitySignPset({
+          pset_hex: createPsetResponse.pset,
+          input_index: 0,
+          redeem_script_hex: state.compiledHex,
+          program: state.compiledProgramBase64,
+          witness: state.compiledWitnessBase64,
+        });
+        addLog(`Simplicity signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
+        console.log("Simplicity signed PSET:", simplicitySignResponse.pset_hex);
+
+        // Step 3: Sign with cosign key via proxy
+        const proxySignResponse = await proxyApi.signPset({
+          pset_hex: simplicitySignResponse.pset_hex,
+          secret_key_hex: state.cosignSecretKey,
+          input_index: 0,
+          redeem_script_hex: state.compiledHex,
+        });
+        addLog(`Cosign signature added (${proxySignResponse.partial_sigs_count} partial signature(s))`);
+        console.log("Fully signed PSET:", proxySignResponse.pset);
+
+        // Step 4: Finalize PSET
+        const finalizeResponse = await proxyApi.finalizePset({
+          pset_hex: proxySignResponse.pset,
+        });
+        console.log("Final transaction hex:", finalizeResponse.transaction_hex);
+
+        // Step 5: Broadcast transaction
+        const broadcastResponse = await proxyApi.broadcastTransaction({
+          transaction_hex: finalizeResponse.transaction_hex,
+        }, "elements");
+        
+        addLog("Transaction broadcast successfully!");
+        addLog(`View transaction: ${broadcastResponse.explorer_url}`);
+        showNotification("Transaction sent successfully!");
+        
+        console.log("Broadcast result:", broadcastResponse);
+      }
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";

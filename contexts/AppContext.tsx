@@ -20,6 +20,7 @@ interface AppState {
   inputTransactionHash: string;
   inputIndex: string;
   cosignSecretKey: string;
+  network: "elements" | "bitcoin";
   
   savedSimplicityProgram: boolean;
   savedBitcoinScript: boolean;
@@ -35,6 +36,7 @@ interface AppContextType {
   updateWitProgram: (wit: string) => void;
   updateBitcoinScript: (script: string) => void;
   updateTransactionForm: (hash: string, index: string, key: string) => void;
+  setNetwork: (network: "elements" | "bitcoin") => void;
   saveSimplicityProgram: (compiledProgramBase64: string, compiledWitnessBase64: string, tweakedPublicKey?: string, includeWitnessForTransaction?: boolean) => void;
   saveBitcoinScript: (compiledHex: string, address: string) => void;
   canSendTransaction: () => boolean;
@@ -57,6 +59,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     inputTransactionHash: "",
     inputIndex: "",
     cosignSecretKey: "",
+    network: "elements",
     savedSimplicityProgram: false,
     savedBitcoinScript: false,
     compiledWithWitnessForTransaction: false,
@@ -100,6 +103,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       inputTransactionHash: hash,
       inputIndex: index,
       cosignSecretKey: key,
+    }));
+  };
+
+  const setNetwork = (network: "elements" | "bitcoin") => {
+    setState((prev) => ({
+      ...prev,
+      network,
+      compiledProgramBase64: "",
+      compiledWitnessBase64: "",
+      savedSimplicityProgram: false,
+      compiledWithWitnessForTransaction: false,
+      compiledHex: "",
+      compiledAddress: "",
+      savedBitcoinScript: false,
     }));
   };
 
@@ -178,6 +195,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateWitProgram,
         updateBitcoinScript,
         updateTransactionForm,
+        setNetwork,
         saveSimplicityProgram,
         saveBitcoinScript,
         canSendTransaction,

@@ -75,7 +75,7 @@ export function BitcoinScript() {
     try {
       const response = await proxyApi.convert({ 
         script,
-        network: API_CONFIG.NETWORK 
+        network: state.network === "elements" ? API_CONFIG.NETWORK : API_CONFIG.BITCOIN_NETWORK
       });
       
       // Save the compiled hex and address in context

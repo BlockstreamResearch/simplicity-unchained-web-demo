@@ -1,7 +1,28 @@
+'use client';
+
 import { FaucetIcon } from "./FaucetIcon";
 import { InfoMenu } from "./InfoMenu";
+import { useApp } from "@/contexts/AppContext";
 
 export function Header() {
+  const { state, setNetwork } = useApp();
+
+  const faucetUrl = state.network === "bitcoin" 
+    ? "https://mempool.space/testnet4/faucet"
+    : "https://liquidtestnet.com/faucet";
+
+  const explorerUrl = state.network === "bitcoin"
+    ? "https://mempool.space/testnet4"
+    : "https://blockstream.info/liquidtestnet/";
+
+  const explorerTitle = state.network === "bitcoin"
+    ? "Mempool Explorer - Bitcoin Testnet4"
+    : "Blockstream Explorer - Liquid Testnet";
+
+  const faucetTitle = state.network === "bitcoin"
+    ? "Bitcoin Testnet4 Faucet"
+    : "Liquid Testnet Faucet";
+
   return (
     <header className="border-b border-zinc-800 bg-zinc-900">
       <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
@@ -9,6 +30,30 @@ export function Header() {
           Simplicity Unchained Web Demo <span className="text-base font-normal text-zinc-500">v0.1.0</span>
         </h1>
         <div className="flex items-center gap-4">
+          {/* Network Switcher */}
+          <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-700 rounded-md p-1">
+            <button
+              onClick={() => setNetwork("elements")}
+              className={`px-3 py-1.5 text-sm font-semibold rounded transition-all ${
+                state.network === "elements"
+                  ? "bg-emerald-600 text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Liquid
+            </button>
+            <button
+              onClick={() => setNetwork("bitcoin")}
+              className={`px-3 py-1.5 text-sm font-semibold rounded transition-all ${
+                state.network === "bitcoin"
+                  ? "text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              style={state.network === "bitcoin" ? { backgroundColor: "#f7931a" } : {}}
+            >
+              Bitcoin
+            </button>
+          </div>
           {/* OPTION 1: InfoMenu in Header */}
           {/* <InfoMenu /> */}
           <a
@@ -32,20 +77,20 @@ export function Header() {
             </svg>
           </a>
           <a
-            href="https://liquidtestnet.com/faucet"
+            href={faucetUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-zinc-400 hover:text-blue-400 transition-colors"
-            title="Liquid Testnet Faucet"
+            title={faucetTitle}
           >
             <FaucetIcon className="w-6 h-6" />
           </a>
           <a
-            href="https://blockstream.info/liquidtestnet/"
+            href={explorerUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-zinc-400 hover:text-blue-400 transition-colors"
-            title="Blockstream Explorer - Liquid Testnet"
+            title={explorerTitle}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

@@ -10,6 +10,7 @@ export interface CompileRequest {
   script: string;
   include_debug: boolean;
   witness?: Record<string, WitnessValue>;
+  environment?: "elements" | "bitcoin";
 }
 
 export interface CompileResponse {
@@ -73,6 +74,50 @@ export interface FinalizePsetResponse {
   }>;
 }
 
+export interface CreatePsbtRequest {
+  inputs: string[];
+  outputs: string[];
+  network: string;
+}
+
+export interface CreatePsbtResponse {
+  inputs: number;
+  network: string;
+  outputs: number;
+  psbt: string;
+}
+
+export interface SignPsbtRequest {
+  psbt_hex: string;
+  secret_key_hex: string;
+  input_index: number;
+  redeem_script_hex: string;
+}
+
+export interface SignPsbtResponse {
+  input_index: number;
+  partial_sigs_count: number;
+  psbt: string;
+  public_key_hex: string;
+  signature_hex: string;
+}
+
+export interface FinalizePsbtRequest {
+  psbt_hex: string;
+}
+
+export interface FinalizePsbtResponse {
+  finalized: boolean;
+  inputs: number;
+  outputs: number;
+  transaction_hex: string;
+  txid: string;
+  witnesses: Array<{
+    input_index: number;
+    witness_elements: number;
+  }>;
+}
+
 export interface GenerateKeypairRequest {
   // Empty object for POST request
 }
@@ -108,8 +153,25 @@ export interface SimplicitySignPsetResponse {
   partial_sigs_count: number;
 }
 
+export interface SimplicitySignPsbtRequest {
+  psbt_hex: string;
+  input_index: number;
+  redeem_script_hex: string;
+  program: string;
+  witness: string;
+}
+
+export interface SimplicitySignPsbtResponse {
+  psbt_hex: string;
+  signature_hex: string;
+  public_key_hex: string;
+  input_index: number;
+  partial_sigs_count: number;
+}
+
 export interface TweakRequest {
   program: string;
+  jet_env: string;
 }
 
 export interface TweakResponse {
@@ -230,6 +292,41 @@ class ProxyApiService {
   }
 
   /**
+   * Create an unsigned Partially Signed Bitcoin Transaction (PSBT)
+   */
+  async createPsbt(request: CreatePsbtRequest): Promise<CreatePsbtResponse> {
+    return this.request<CreatePsbtResponse>(
+      API_CONFIG.ENDPOINTS.CREATE_PSBT,
+      "POST",
+      request,
+    );
+  }
+
+  /**
+   * Sign a PSBT input with a private key
+   */
+  async signPsbt(request: SignPsbtRequest): Promise<SignPsbtResponse> {
+    return this.request<SignPsbtResponse>(
+      API_CONFIG.ENDPOINTS.SIGN_PSBT,
+      "POST",
+      request,
+    );
+  }
+
+  /**
+   * Finalize a fully signed PSBT and extract the transaction hex
+   */
+  async finalizePsbt(
+    request: FinalizePsbtRequest,
+  ): Promise<FinalizePsbtResponse> {
+    return this.request<FinalizePsbtResponse>(
+      API_CONFIG.ENDPOINTS.FINALIZE_PSBT,
+      "POST",
+      request,
+    );
+  }
+
+  /**
    * Generate a random secp256k1 keypair
    */
   async generateKeypair(): Promise<GenerateKeypairResponse> {
@@ -241,12 +338,16 @@ class ProxyApiService {
   }
 
   /**
-   * Broadcast a transaction to the Liquid Testnet network
+   * Broadcast a transaction to the network (Liquid Testnet or Bitcoin Testnet4)
    */
   async broadcastTransaction(
     request: BroadcastTransactionRequest,
+    network: "elements" | "bitcoin" = "elements",
   ): Promise<BroadcastTransactionResponse> {
-    const url = "https://blockstream.info/liquidtestnet/api/tx";
+    const url =
+      network === "bitcoin"
+        ? "https://mempool.space/testnet4/api/tx"
+        : "https://blockstream.info/liquidtestnet/api/tx";
 
     try {
       const response = await fetch(url, {
@@ -265,7 +366,10 @@ class ProxyApiService {
       }
 
       const txid = await response.text();
-      const explorer_url = `https://blockstream.info/liquidtestnet/tx/${txid}?expand`;
+      const explorer_url =
+        network === "bitcoin"
+          ? `https://mempool.space/testnet4/tx/${txid}`
+          : `https://blockstream.info/liquidtestnet/tx/${txid}?expand`;
 
       return {
         txid,
@@ -288,6 +392,20 @@ class ProxyApiService {
   ): Promise<SimplicitySignPsetResponse> {
     return this.request<SimplicitySignPsetResponse>(
       API_CONFIG.ENDPOINTS.SIMPLICITY_SIGN,
+      "POST",
+      request,
+    );
+  }
+
+  /**
+   * Sign a Bitcoin PSBT using the Simplicity Unchained service
+   * Executes a Simplicity program and co-signs a 2-of-2 multisig transaction if successful
+   */
+  async simplicitySignPsbt(
+    request: SimplicitySignPsbtRequest,
+  ): Promise<SimplicitySignPsbtResponse> {
+    return this.request<SimplicitySignPsbtResponse>(
+      API_CONFIG.ENDPOINTS.SIMPLICITY_SIGN_PSBT,
       "POST",
       request,
     );
