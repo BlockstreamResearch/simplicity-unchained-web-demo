@@ -5,12 +5,14 @@ import { SendTransaction } from '@/components/SendTransaction';
 import { Logs } from '@/components/Logs';
 import { Notification } from '@/components/Notification';
 import { InfoMenu } from '@/components/InfoMenu';
+import { WarningModal } from '@/components/WarningModal';
 import { AppProvider } from '@/contexts/AppContext';
 
 export default function Home() {
   return (
     <AppProvider>
       <div className="min-h-screen bg-zinc-950 text-zinc-100">
+        <WarningModal />
         <Header />
         <Notification />
 
