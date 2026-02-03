@@ -43,23 +43,25 @@ export interface CreatePsetResponse {
   pset: string;
 }
 
-export interface SignPsetRequest {
+export interface SighashPsetRequest {
   pset_hex: string;
-  secret_key_hex: string;
   input_index: number;
   redeem_script_hex: string;
 }
 
-export interface SignPsetResponse {
+export interface SighashPsetResponse {
+  sighash_hex: string;
+  message_hex: string;
   input_index: number;
-  partial_sigs_count: number;
-  pset: string;
-  public_key_hex: string;
-  signature_hex: string;
+  sighash_type: string;
 }
 
 export interface FinalizePsetRequest {
   pset_hex: string;
+  redeem_script_hex: string;
+  input_index: number;
+  signature_hex: string;
+  public_key_hex: string;
 }
 
 export interface FinalizePsetResponse {
@@ -87,23 +89,25 @@ export interface CreatePsbtResponse {
   psbt: string;
 }
 
-export interface SignPsbtRequest {
+export interface SighashPsbtRequest {
   psbt_hex: string;
-  secret_key_hex: string;
   input_index: number;
   redeem_script_hex: string;
 }
 
-export interface SignPsbtResponse {
+export interface SighashPsbtResponse {
+  sighash_hex: string;
+  message_hex: string;
   input_index: number;
-  partial_sigs_count: number;
-  psbt: string;
-  public_key_hex: string;
-  signature_hex: string;
+  sighash_type: string;
 }
 
 export interface FinalizePsbtRequest {
   psbt_hex: string;
+  redeem_script_hex: string;
+  input_index: number;
+  signature_hex: string;
+  public_key_hex: string;
 }
 
 export interface FinalizePsbtResponse {
@@ -116,16 +120,6 @@ export interface FinalizePsbtResponse {
     input_index: number;
     witness_elements: number;
   }>;
-}
-
-export interface GenerateKeypairRequest {
-  // Empty object for POST request
-}
-
-export interface GenerateKeypairResponse {
-  compressed: boolean;
-  public_key: string;
-  secret_key: string;
 }
 
 export interface BroadcastTransactionRequest {
@@ -177,17 +171,6 @@ export interface TweakRequest {
 export interface TweakResponse {
   cmr_hex: string;
   tweaked_public_key_hex: string;
-}
-
-export interface SignMessageRequest {
-  message: string;
-  secret_key_hex: string;
-}
-
-export interface SignMessageResponse {
-  digest_hex: string;
-  public_key_hex: string;
-  signature_hex: string;
 }
 
 class ProxyApiService {
@@ -268,18 +251,18 @@ class ProxyApiService {
   }
 
   /**
-   * Sign a PSET input with a private key
+   * Compute sighash for a PSET input
    */
-  async signPset(request: SignPsetRequest): Promise<SignPsetResponse> {
-    return this.request<SignPsetResponse>(
-      API_CONFIG.ENDPOINTS.SIGN_PSET,
+  async sighashPset(request: SighashPsetRequest): Promise<SighashPsetResponse> {
+    return this.request<SighashPsetResponse>(
+      API_CONFIG.ENDPOINTS.SIGHASH_PSET,
       "POST",
       request,
     );
   }
 
   /**
-   * Finalize a fully signed PSET and extract the transaction hex
+   * Finalize a PSET with the last signature and extract the transaction hex
    */
   async finalizePset(
     request: FinalizePsetRequest,
@@ -303,18 +286,18 @@ class ProxyApiService {
   }
 
   /**
-   * Sign a PSBT input with a private key
+   * Compute sighash for a PSBT input
    */
-  async signPsbt(request: SignPsbtRequest): Promise<SignPsbtResponse> {
-    return this.request<SignPsbtResponse>(
-      API_CONFIG.ENDPOINTS.SIGN_PSBT,
+  async sighashPsbt(request: SighashPsbtRequest): Promise<SighashPsbtResponse> {
+    return this.request<SighashPsbtResponse>(
+      API_CONFIG.ENDPOINTS.SIGHASH_PSBT,
       "POST",
       request,
     );
   }
 
   /**
-   * Finalize a fully signed PSBT and extract the transaction hex
+   * Finalize a PSBT with the last signature and extract the transaction hex
    */
   async finalizePsbt(
     request: FinalizePsbtRequest,
@@ -323,17 +306,6 @@ class ProxyApiService {
       API_CONFIG.ENDPOINTS.FINALIZE_PSBT,
       "POST",
       request,
-    );
-  }
-
-  /**
-   * Generate a random secp256k1 keypair
-   */
-  async generateKeypair(): Promise<GenerateKeypairResponse> {
-    return this.request<GenerateKeypairResponse>(
-      API_CONFIG.ENDPOINTS.GENERATE,
-      "POST",
-      {},
     );
   }
 
@@ -418,18 +390,6 @@ class ProxyApiService {
   async tweak(request: TweakRequest): Promise<TweakResponse> {
     return this.request<TweakResponse>(
       API_CONFIG.ENDPOINTS.TWEAK,
-      "POST",
-      request,
-    );
-  }
-
-  /**
-   * Sign a message with a secret key using Schnorr signature
-   * Returns the signature, public key, and message digest
-   */
-  async signMessage(request: SignMessageRequest): Promise<SignMessageResponse> {
-    return this.request<SignMessageResponse>(
-      API_CONFIG.ENDPOINTS.SIGN_MESSAGE,
       "POST",
       request,
     );

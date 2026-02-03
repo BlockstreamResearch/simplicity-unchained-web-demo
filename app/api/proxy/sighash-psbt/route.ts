@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PROXY_BASE_URL =
-  process.env.NEXT_PUBLIC_PROXY_URL || "http://localhost:3001";
+const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || "http://localhost:3001";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
     const response = await fetch(
-      `${PROXY_BASE_URL}/simplicity-unchained-web-proxy-demo/sign_message`,
+      `${PROXY_URL}/simplicity-unchained-web-proxy-demo/sighash-psbt`,
       {
         method: "POST",
         headers: {
@@ -18,20 +17,20 @@ export async function POST(request: NextRequest) {
       },
     );
 
-    const data = await response.json();
-
     if (!response.ok) {
+      const errorText = await response.text();
       return NextResponse.json(
-        { error: data.error || "Sign message request failed" },
+        { error: errorText || "Failed to compute sighash for PSBT" },
         { status: response.status },
       );
     }
 
+    const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Sign message proxy error:", error);
+    console.error("Proxy error:", error);
     return NextResponse.json(
-      { error: "Failed to process sign message request" },
+      { error: "Internal server error" },
       { status: 500 },
     );
   }

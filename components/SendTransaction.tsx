@@ -4,6 +4,8 @@ import { useApp } from "@/contexts/AppContext";
 import { proxyApi } from "@/services/proxyApi";
 import { useState, useRef, useEffect } from "react";
 import { API_CONFIG } from "@/config/api.config";
+import { secp256k1, schnorr } from "@noble/curves/secp256k1.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 export function SendTransaction() {
   const { state, updateTransactionForm, canSendTransaction, addLog, showNotification } = useApp();
@@ -64,20 +66,32 @@ export function SendTransaction() {
           .join('');
       }
 
-      // Call the sign message API
-      const response = await proxyApi.signMessage({
-        message: messageHex,
-        secret_key_hex: state.cosignSecretKey,
-      });
+      // Convert hex string to bytes
+      const messageBytes = Uint8Array.from(Buffer.from(messageHex, 'hex'));
+
+      const messageHash = sha256(messageBytes);
+      
+      // Convert private key hex to bytes
+      const privateKey = Buffer.from(state.cosignSecretKey, 'hex');
+      
+      // Sign using schnorr (it will hash the message internally)
+      const signature = schnorr.sign(messageHash, privateKey);
+      const signatureHex = Buffer.from(signature).toString('hex');
+      
+      // Get public key
+      const publicKey = secp256k1.getPublicKey(privateKey, true);
+      
+      const publicKeyHex = Buffer.from(publicKey).toString('hex');    
+      const messageHashHex = Buffer.from(messageHash).toString('hex');
 
       // Log the results
       addLog(`Message signed successfully`);
-      addLog(`Message Hash: ${response.digest_hex}`);
-      addLog(`Signature: ${response.signature_hex}`);
+      addLog(`Message Hash: ${messageHashHex}`);
+      addLog(`Signature: ${signatureHex}`);
       
-      console.log("Public Key:", response.public_key_hex);
-      console.log("Message Hash:", response.digest_hex);
-      console.log("Signature:", response.signature_hex);
+      console.log("Public Key:", publicKeyHex);
+      console.log("Message Hash:", messageHashHex);
+      console.log("Signature:", signatureHex);
 
       showNotification("Message signed successfully!");
       setShowSignModal(false);
@@ -128,26 +142,45 @@ export function SendTransaction() {
           program: state.compiledProgramBase64,
           witness: state.compiledWitnessBase64,
         });
-        addLog(`Simplicity signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
+        addLog(`Simplicity Unchained signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
         console.log("Simplicity signed PSBT:", simplicitySignResponse.psbt_hex);
 
-        // Step 3: Sign with cosign key via proxy
-        const proxySignResponse = await proxyApi.signPsbt({
+        // Step 3: Compute sighash for cosigner
+        const sighashResponse = await proxyApi.sighashPsbt({
           psbt_hex: simplicitySignResponse.psbt_hex,
-          secret_key_hex: state.cosignSecretKey,
           input_index: 0,
           redeem_script_hex: state.compiledHex,
         });
-        addLog(`Cosign signature added (${proxySignResponse.partial_sigs_count} partial signature(s))`);
-        console.log("Fully signed PSBT:", proxySignResponse.psbt);
+        console.log("Sighash:", sighashResponse);
 
-        // Step 4: Finalize PSBT
+        // Step 4: Sign locally with cosign key
+        const messageHash = Buffer.from(sighashResponse.sighash_hex, 'hex');
+        const privateKey = Buffer.from(state.cosignSecretKey, 'hex');
+        const signatureBytes = secp256k1.sign(messageHash, privateKey, {prehash: false});
+        const signature = secp256k1.Signature.fromBytes(signatureBytes);
+        const publicKey = secp256k1.getPublicKey(privateKey, true);
+        
+        // Append sighash type (0x01 for SIGHASH_ALL)
+        const signatureWithSighashType = new Uint8Array([...signature.toBytes('der'), 0x01]);
+        const signatureHex = Buffer.from(signatureWithSighashType).toString('hex');
+        const publicKeyHex = Buffer.from(publicKey).toString('hex');
+        
+        addLog(`Local signature created`);
+        console.log("Signature:", signatureHex);
+        console.log("Public Key:", publicKeyHex);
+
+        // Step 5: Finalize PSBT with signature
         const finalizeResponse = await proxyApi.finalizePsbt({
-          psbt_hex: proxySignResponse.psbt,
+          psbt_hex: simplicitySignResponse.psbt_hex,
+          redeem_script_hex: state.compiledHex,
+          input_index: 0,
+          signature_hex: signatureHex,
+          public_key_hex: publicKeyHex,
         });
+        addLog(`PSBT finalized`);
         console.log("Final transaction hex:", finalizeResponse.transaction_hex);
 
-        // Step 5: Broadcast transaction
+        // Step 6: Broadcast transaction
         const broadcastResponse = await proxyApi.broadcastTransaction({
           transaction_hex: finalizeResponse.transaction_hex,
         }, "bitcoin");
@@ -180,26 +213,42 @@ export function SendTransaction() {
           program: state.compiledProgramBase64,
           witness: state.compiledWitnessBase64,
         });
-        addLog(`Simplicity signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
+        addLog(`Simplicity Unchained signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
         console.log("Simplicity signed PSET:", simplicitySignResponse.pset_hex);
-
-        // Step 3: Sign with cosign key via proxy
-        const proxySignResponse = await proxyApi.signPset({
+        // Step 3: Compute sighash for cosigner
+        const sighashResponse = await proxyApi.sighashPset({
           pset_hex: simplicitySignResponse.pset_hex,
-          secret_key_hex: state.cosignSecretKey,
           input_index: 0,
           redeem_script_hex: state.compiledHex,
         });
-        addLog(`Cosign signature added (${proxySignResponse.partial_sigs_count} partial signature(s))`);
-        console.log("Fully signed PSET:", proxySignResponse.pset);
+        console.log("Sighash:", sighashResponse);
 
-        // Step 4: Finalize PSET
+        // Step 4: Sign locally with cosign key
+        const messageHash = Buffer.from(sighashResponse.sighash_hex, 'hex');
+        const privateKey = Buffer.from(state.cosignSecretKey, 'hex');
+        const signatureBytes = secp256k1.sign(messageHash, privateKey, {prehash: false});
+        const signature = secp256k1.Signature.fromBytes(signatureBytes);
+        const publicKey = secp256k1.getPublicKey(privateKey, true);
+        
+        // Append sighash type (0x01 for SIGHASH_ALL)
+        const signatureWithSighashType = new Uint8Array([...signature.toBytes('der'), 0x01]);
+        const signatureHex = Buffer.from(signatureWithSighashType).toString('hex');
+        const publicKeyHex = Buffer.from(publicKey).toString('hex');
+        
+        addLog(`Local signature created`);
+
+        // Step 5: Finalize PSET with signature
         const finalizeResponse = await proxyApi.finalizePset({
-          pset_hex: proxySignResponse.pset,
+          pset_hex: simplicitySignResponse.pset_hex,
+          redeem_script_hex: state.compiledHex,
+          input_index: 0,
+          signature_hex: signatureHex,
+          public_key_hex: publicKeyHex,
         });
+        addLog(`PSET finalized`);
         console.log("Final transaction hex:", finalizeResponse.transaction_hex);
 
-        // Step 5: Broadcast transaction
+        // Step 6: Broadcast transaction
         const broadcastResponse = await proxyApi.broadcastTransaction({
           transaction_hex: finalizeResponse.transaction_hex,
         }, "elements");
@@ -224,19 +273,25 @@ export function SendTransaction() {
   const handleGenerateKeypair = async () => {
     setIsGenerating(true);
     try {
-      const response = await proxyApi.generateKeypair();
+      // Generate a random private key
+      const privateKey = secp256k1.utils.randomSecretKey();
+      const privateKeyHex = Buffer.from(privateKey).toString('hex');
+      
+      // Get the public key
+      const publicKey = secp256k1.getPublicKey(privateKey, true); // true for compressed
+      const publicKeyHex = Buffer.from(publicKey).toString('hex');
       
       // Update the form with the generated secret key
       updateTransactionForm(
         state.inputTransactionHash,
         state.inputIndex,
-        response.secret_key
+        privateKeyHex
       );
       
       // Log the public key
-      addLog(`Keypair generated - Public Key: ${response.public_key}`);
-      console.log("Generated Public Key:", response.public_key);
-      console.log("Generated Secret Key:", response.secret_key);
+      addLog(`Keypair generated - Public Key: ${publicKeyHex}`);
+      console.log("Generated Public Key:", publicKeyHex);
+      console.log("Generated Secret Key:", privateKeyHex);
       
       showNotification("Keypair generated successfully");
     } catch (error) {

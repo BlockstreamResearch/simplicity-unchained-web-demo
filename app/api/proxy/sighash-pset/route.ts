@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || "http://localhost:3000";
+const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || "http://localhost:3001";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
     const response = await fetch(
-      `${PROXY_URL}/simplicity-unchained-web-proxy-demo/generate`,
+      `${PROXY_URL}/simplicity-unchained-web-proxy-demo/sighash-pset`,
       {
         method: "POST",
         headers: {
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       return NextResponse.json(
-        { error: errorText || "Failed to generate keypair" },
+        { error: errorText || "Failed to compute sighash for PSET" },
         { status: response.status },
       );
     }
