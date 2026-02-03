@@ -55,7 +55,7 @@ export function WarningModal() {
               This is a demonstration application operating on <strong>Liquid Testnet</strong> and <strong>Bitcoin Testnet4</strong>.
             </p>
             <p>
-              <strong>NEVER</strong> use your actual secret keys. All private keys go through a proxy to simplify demo frontend development. Your keys are <strong>NOT SECURE</strong> in this environment.
+              <strong>NEVER</strong> use your actual secret keys. This is a demo environment where keys are used for demonstration purposes only. Your keys are <strong>NOT SECURE</strong> in this environment.
             </p>
             <p>
               It's better to get UTXOs from faucets and never, under any condition, use your real secret keys.

@@ -153,6 +153,10 @@ export function SendTransaction() {
         });
         console.log("Sighash:", sighashResponse);
 
+        if (!sighashResponse.sighash_hex) {
+          throw new Error(`Sighash response missing sighash_hex field. Response: ${JSON.stringify(sighashResponse)}`);
+        }
+
         // Step 4: Sign locally with cosign key
         const messageHash = Buffer.from(sighashResponse.sighash_hex, 'hex');
         const privateKey = Buffer.from(state.cosignSecretKey, 'hex');
@@ -222,6 +226,10 @@ export function SendTransaction() {
           redeem_script_hex: state.compiledHex,
         });
         console.log("Sighash:", sighashResponse);
+
+        if (!sighashResponse.sighash_hex) {
+          throw new Error(`Sighash response missing sighash_hex field. Response: ${JSON.stringify(sighashResponse)}`);
+        }
 
         // Step 4: Sign locally with cosign key
         const messageHash = Buffer.from(sighashResponse.sighash_hex, 'hex');
