@@ -1,0 +1,16 @@
+{
+  "name": "simplicity-lib",
+  "version": "0.1.0",
+  "files": [
+    "simplicity_lib_bg.wasm",
+    "simplicity_lib.js",
+    "simplicity_lib_bg.js",
+    "simplicity_lib.d.ts"
+  ],
+  "module": "simplicity_lib.js",
+  "types": "simplicity_lib.d.ts",
+  "sideEffects": [
+    "./simplicity_lib.js",
+    "./snippets/*"
+  ]
+}
