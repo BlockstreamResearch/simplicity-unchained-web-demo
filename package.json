@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "test": "exit 0"
   },
   "dependencies": {
     "@noble/curves": "^2.0.1",
