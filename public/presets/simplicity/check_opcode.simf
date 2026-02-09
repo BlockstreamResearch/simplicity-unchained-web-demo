@@ -1,3 +1,8 @@
+//
+// CHECK OPCODE
+// This is a simple test to check that the opcode extraction from the script works correctly.
+// You can read any opcode from a script and build an additional branching logic on it.
+//
 fn main() {
     // Test that the opcode extraction works correctly
     // 

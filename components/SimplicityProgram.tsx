@@ -10,6 +10,12 @@ import { proxyApi } from '@/services/proxyApi';
 const PRESETS = [
   { fileName: 'check_opcode.simf', label: 'Check Opcode' },
   { fileName: 'sig_verify_with_pubkey_from_script.simf', label: 'Sig Verify With Pubkey From Script' },
+  { fileName: 'p2ms.simf', label: 'Pay to Multisig (2-of-3)' },
+  { fileName: 'transfer_with_timeout.simf', label: 'Transfer With Timeout' },
+  { fileName: 'escrow_with_delay.simf', label: 'Escrow With Delay' },
+  { fileName: 'last_will.simf', label: 'Last Will' },
+  { fileName: 'hodl_vault.simf', label: 'HODL Vault' },
+  { fileName: 'non_interactive_fee_bump.simf', label: 'Non-Interactive Fee Bump' },
 ];
 
 interface WitnessEntry {
