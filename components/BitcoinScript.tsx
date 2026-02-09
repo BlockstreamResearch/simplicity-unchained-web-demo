@@ -6,6 +6,7 @@ import { useApp } from "@/contexts/AppContext";
 import { PresetDropdown } from "./PresetDropdown";
 import { proxyApi } from "@/services/proxyApi";
 import { API_CONFIG } from "@/config/api.config";
+import { sendGAEvent } from '@next/third-parties/google';
 
 const PRESETS = [
   {
@@ -84,11 +85,21 @@ export function BitcoinScript() {
       // Log the address
       console.log("Generated Address:", response.address);
       console.log("Compiled Hex:", response.hex);
+      
+      // Track successful compilation
+      sendGAEvent('event', 'success_action', {
+        location: 'bitcoin_script_compile',
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       addLog(`Failed to compile Bitcoin script: ${errorMessage}`);
       showNotification("Failed to compile Bitcoin script", true);
       console.error("Bitcoin script compilation error:", error);
+      
+      // Track compilation failure
+      sendGAEvent('event', 'error_action', {
+        location: 'bitcoin_script_compile',
+      });
     } finally {
       setIsCompiling(false);
     }

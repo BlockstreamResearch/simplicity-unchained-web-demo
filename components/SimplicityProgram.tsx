@@ -6,6 +6,7 @@ import { useApp } from '@/contexts/AppContext';
 import { PresetDropdown } from './PresetDropdown';
 import { InfoMenu } from './InfoMenu';
 import { proxyApi } from '@/services/proxyApi';
+import { sendGAEvent } from '@next/third-parties/google';
 
 const PRESETS = [
   { fileName: 'check_opcode.simf', label: 'Check Opcode' },
@@ -199,15 +200,30 @@ export function SimplicityProgram() {
         const tweakErrorMessage = tweakError instanceof Error ? tweakError.message : "Unknown error";
         console.error("Tweak computation error:", tweakError);
         addLog(`Failed to compute tweaked public key: ${tweakErrorMessage}`);
+        
+        // Track tweak failure
+        sendGAEvent('event', 'error_action', {
+          location: 'simplicity_tweak',
+        });
       }
 
       // Save the compiled program and witness in context (this will add the success log)
       saveSimplicityProgram(response.program_base64, response.witness_base64 || '', tweakedPublicKey, includeWitness);
+      
+      // Track successful compilation
+      sendGAEvent('event', 'success_action', {
+        location: 'simplicity_compile',
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       addLog(`Failed to compile Simplicity program: ${errorMessage}`);
       showNotification("Failed to compile Simplicity program", true);
       console.error("Simplicity program compilation error:", error);
+      
+      // Track compilation failure
+      sendGAEvent('event', 'error_action', {
+        location: 'simplicity_compile',
+      });
     } finally {
       setIsCompiling(false);
     }

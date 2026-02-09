@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { sendGAEvent } from '@next/third-parties/google';
 
 interface Preset {
   fileName: string;
@@ -43,6 +44,12 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
           // It's okay if wit file doesn't exist
           console.log(`No wit file found for ${fileName}`);
         }
+
+        // Track preset selection
+        sendGAEvent('event', 'select_content', {
+          content_type: 'preset',
+          content_id: fileName,
+        });
 
         onSelect(simfContent, presetLabel, witContent);
       }

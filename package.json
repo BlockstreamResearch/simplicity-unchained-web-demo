@@ -9,6 +9,7 @@
     "test": "exit 0"
   },
   "dependencies": {
+    "@next/third-parties": "^16.1.6",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
     "@types/react-syntax-highlighter": "^15.5.13",
