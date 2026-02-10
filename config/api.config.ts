@@ -11,4 +11,5 @@ export const API_CONFIG = {
     SIMPLICITY_SIGN_PSBT: "/simplicity-sign-psbt",
     TWEAK: "/tweak",
   },
+  GOOGLE_ANALYTICS_ID: process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID || "",
 } as const;

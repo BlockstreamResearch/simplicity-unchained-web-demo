@@ -1,3 +1,6 @@
+//
+// SIGNATURE VERIFY WITH PUBKEY FROM SCRIPT
+//
 // Test that X-only public keys can be extracted from a script
 //
 // You can utilize pubkeys embedded in scripts to verify signatures against them.

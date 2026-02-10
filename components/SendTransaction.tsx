@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from "react";
 import { API_CONFIG } from "@/config/api.config";
 import { secp256k1, schnorr } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { sendGAEvent } from '@next/third-parties/google';
 
 export function SendTransaction() {
   const { state, updateTransactionForm, canSendTransaction, addLog, showNotification } = useApp();
@@ -194,6 +195,11 @@ export function SendTransaction() {
         showNotification("Transaction sent successfully!");
         
         console.log("Broadcast result:", broadcastResponse);
+        
+        // Track successful transaction
+        sendGAEvent('event', 'success_action', {
+          location: 'transaction_send',
+        });
       } else {
         // Elements PSET flow
         // Step 1: Create PSET
@@ -266,6 +272,11 @@ export function SendTransaction() {
         showNotification("Transaction sent successfully!");
         
         console.log("Broadcast result:", broadcastResponse);
+        
+        // Track successful transaction
+        sendGAEvent('event', 'success_action', {
+          location: 'transaction_send',
+        });
       }
 
     } catch (error) {
@@ -273,6 +284,11 @@ export function SendTransaction() {
       addLog(`Transaction failed: ${errorMessage}`);
       showNotification("Transaction failed", true);
       console.error("Transaction error:", error);
+      
+      // Track transaction failure
+      sendGAEvent('event', 'error_action', {
+        location: 'transaction_send',
+      });
     } finally {
       setIsSending(false);
     }
