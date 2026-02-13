@@ -23,6 +23,12 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# NEXT_PUBLIC_* values are compiled into the client bundle during `pnpm build`.
+ARG NEXT_PUBLIC_SIMPLICITY_SERVICE_URL=http://localhost:8080
+ARG NEXT_PUBLIC_GOOGLE_ANALYTICS_ID=""
+ENV NEXT_PUBLIC_SIMPLICITY_SERVICE_URL=$NEXT_PUBLIC_SIMPLICITY_SERVICE_URL
+ENV NEXT_PUBLIC_GOOGLE_ANALYTICS_ID=$NEXT_PUBLIC_GOOGLE_ANALYTICS_ID
+
 # Build the application
 RUN pnpm build
 
