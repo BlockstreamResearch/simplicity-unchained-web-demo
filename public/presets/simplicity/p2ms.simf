@@ -43,7 +43,7 @@ fn main() {
     // Extract the third signer's pubkey from script (the additional party in 2-of-3)
     let pk1: Pubkey = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798; // 1 * G
     let pk2: Pubkey = 0xc6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5; // 2 * G
-    let pk3: Pubkey = jet::get_pubkey_from_script(35); // Third signer extracted from script
+    let pk3: Pubkey = jet::get_pubkey_from_script(0); // Third signer extracted from script
     
     let pks: [Pubkey; 3] = [pk1, pk2, pk3];
     check2of3multisig(pks, witness::MAYBE_SIGS);

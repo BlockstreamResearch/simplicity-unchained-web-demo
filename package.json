@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "exit 0"
+    "test": "pnpm test:frontend && pnpm test:rust",
+    "test:frontend": "tsx --test tests/*.test.ts",
+    "test:rust": "cargo test --manifest-path simplicity-lib/Cargo.toml --locked",
+    "build:wasm": "wasm-pack build simplicity-lib --target bundler --release -- --locked"
   },
   "dependencies": {
     "@next/third-parties": "^16.1.6",
@@ -26,6 +29,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "tsx": "^4.21.0"
   }
 }

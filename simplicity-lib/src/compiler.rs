@@ -1,13 +1,13 @@
+use base64::{Engine, engine::general_purpose::STANDARD};
+use serde::{Deserialize, Serialize};
+use simplicityhl::{
+    ResolvedType, Value, WitnessNameToValueMap, WitnessValues, ast::JetHinter,
+    parse::ParseFromStr, str::Identifier,
+};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use serde::{Deserialize, Serialize};
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
-use simplicityhl::parse::ParseFromStr;
-use simplicityhl::simplicity_unchained::jets::bitcoin::CoreExtension;
-use simplicityhl::simplicity_unchained::jets::elements::ElementsExtension;
-use simplicityhl::str::WitnessName;
-use simplicityhl::{ResolvedType, Value, WitnessValues};
+
+use crate::jets::{CoreExtensionHinter, ElementsExtensionHinter};
 
 #[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
@@ -33,6 +33,8 @@ fn default_environment() -> Environment {
 #[derive(Debug, Serialize)]
 pub struct CompileResponse {
     pub program_base64: String,
+    /// Commitment Merkle root; the service tweaks its key with this value.
+    pub cmr_hex: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub witness_base64: Option<String>,
 }
@@ -46,109 +48,60 @@ pub struct Witness {
 
 #[wasm_bindgen]
 pub fn compile(request_json: JsValue) -> Result<JsValue, JsValue> {
-    let req: CompileRequest = serde_wasm_bindgen::from_value(request_json)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse request: {}", e)))?;
+    let request = serde_wasm_bindgen::from_value(request_json)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse request: {e}")))?;
+    let result = compile_program(request).map_err(|e| JsValue::from_str(&e))?;
+    serde_wasm_bindgen::to_value(&result)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize response: {e}")))
+}
 
-    match req.environment {
-        Environment::Elements => compile_with_elements(req),
-        Environment::Bitcoin => compile_with_bitcoin(req),
+pub fn compile_program(request: CompileRequest) -> Result<CompileResponse, String> {
+    match request.environment {
+        Environment::Elements => compile_with(Box::new(ElementsExtensionHinter), request),
+        Environment::Bitcoin => compile_with(Box::new(CoreExtensionHinter), request),
     }
 }
 
-fn compile_with_elements(req: CompileRequest) -> Result<JsValue, JsValue> {
-    let script = req.script;
-    let include_debug = req.include_debug;
+fn compile_with(
+    jet_hinter: Box<dyn JetHinter>,
+    request: CompileRequest,
+) -> Result<CompileResponse, String> {
+    let compiled = simplicityhl::CompiledProgram::new(
+        request.script,
+        simplicityhl::Arguments::default(),
+        request.include_debug,
+        jet_hinter,
+    )
+    .map_err(|e| format!("Compile error: {e}"))?;
 
-    let args = simplicityhl::Arguments::<ElementsExtension>::default();
+    let commit = compiled.commit();
+    let program_base64 = STANDARD.encode(commit.to_vec_without_witness());
+    let cmr_hex = commit.cmr().to_string();
+    let witness_base64 = request
+        .witness
+        .map(|witness| {
+            let values = witness
+                .into_iter()
+                .map(|(name, witness)| {
+                    let ty = ResolvedType::parse_from_str(&witness.type_)
+                        .map_err(|e| format!("Invalid witness type: {e}"))?;
+                    let value = Value::parse_from_str(&witness.value, &ty)
+                        .map_err(|e| format!("Invalid witness value: {e}"))?;
+                    let key = WitnessValues::ident_to_key(&Identifier::from_str_unchecked(&name));
+                    Ok((key, value))
+                })
+                .collect::<Result<HashMap<_, _>, String>>()?;
+            let satisfied = compiled
+                .satisfy(WitnessValues::from_map(values))
+                .map_err(|e| format!("Satisfy error: {e}"))?;
+            let (_, witness_bytes) = satisfied.redeem().to_vec_with_witness();
+            Ok::<_, String>(STANDARD.encode(witness_bytes))
+        })
+        .transpose()?;
 
-    let compiled = simplicityhl::CompiledProgram::<ElementsExtension>::new(script, args, include_debug)
-        .map_err(|e| JsValue::from_str(&format!("compile error: {}", e)))?;
-
-    let program_bytes = compiled.commit().to_vec_without_witness();
-    let program_b64 = STANDARD.encode(&program_bytes);
-
-    let witness_b64 = if let Some(witness) = req.witness {
-        let mut converted_witness = HashMap::new();
-
-        for (key, value) in witness {
-            let name = WitnessName::from_str_unchecked(key.as_str());
-            let value = Value::parse_from_str(
-                &value.value,
-                &ResolvedType::parse_from_str(value.type_.as_str())
-                    .map_err(|e| JsValue::from_str(&format!("value of witness is incorrect: {}", e)))?,
-            )
-            .map_err(|e| JsValue::from_str(&format!("witness is incorrect: {}", e)))?;
-
-            converted_witness.insert(name, value);
-        }
-
-        let witness = WitnessValues::from(converted_witness);
-
-        let satisfied = compiled
-            .satisfy(witness)
-            .map_err(|e| JsValue::from_str(&format!("satisfy error: {}", e)))?;
-
-        let (_, witness_bytes) = satisfied.redeem().to_vec_with_witness();
-
-        Some(STANDARD.encode(&witness_bytes))
-    } else {
-        None
-    };
-
-    let response = CompileResponse {
-        program_base64: program_b64,
-        witness_base64: witness_b64,
-    };
-
-    serde_wasm_bindgen::to_value(&response)
-        .map_err(|e| JsValue::from_str(&format!("Failed to serialize response: {}", e)))
-}
-
-fn compile_with_bitcoin(req: CompileRequest) -> Result<JsValue, JsValue> {
-    let script = req.script;
-    let include_debug = req.include_debug;
-
-    let args = simplicityhl::Arguments::<CoreExtension>::default();
-
-    let compiled = simplicityhl::CompiledProgram::<CoreExtension>::new(script, args, include_debug)
-        .map_err(|e| JsValue::from_str(&format!("compile error: {}", e)))?;
-
-    let program_bytes = compiled.commit().to_vec_without_witness();
-    let program_b64 = STANDARD.encode(&program_bytes);
-
-    let witness_b64 = if let Some(witness) = req.witness {
-        let mut converted_witness = HashMap::new();
-
-        for (key, value) in witness {
-            let name = WitnessName::from_str_unchecked(key.as_str());
-            let value = Value::parse_from_str(
-                &value.value,
-                &ResolvedType::parse_from_str(value.type_.as_str())
-                    .map_err(|e| JsValue::from_str(&format!("value of witness is incorrect: {}", e)))?,
-            )
-            .map_err(|e| JsValue::from_str(&format!("witness is incorrect: {}", e)))?;
-
-            converted_witness.insert(name, value);
-        }
-
-        let witness = WitnessValues::from(converted_witness);
-
-        let satisfied = compiled
-            .satisfy(witness)
-            .map_err(|e| JsValue::from_str(&format!("satisfy error: {}", e)))?;
-
-        let (_, witness_bytes) = satisfied.redeem().to_vec_with_witness();
-
-        Some(STANDARD.encode(&witness_bytes))
-    } else {
-        None
-    };
-
-    let response = CompileResponse {
-        program_base64: program_b64,
-        witness_base64: witness_b64,
-    };
-
-    serde_wasm_bindgen::to_value(&response)
-        .map_err(|e| JsValue::from_str(&format!("Failed to serialize response: {}", e)))
+    Ok(CompileResponse {
+        program_base64,
+        cmr_hex,
+        witness_base64,
+    })
 }

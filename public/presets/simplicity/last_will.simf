@@ -24,13 +24,14 @@ fn recursive_covenant() {
 
 fn inherit_spend(inheritor_sig: Signature) {
     let days_180: Distance = 25920;
-    jet::check_lock_distance(days_180);
+    // Simplicity 0.9 name for check_lock_distance; Simplicity Unchained runs a corrected implementation.
+    jet::broken_do_not_use_check_lock_distance(days_180);
     let inheritor_pk: Pubkey = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798; // 1 * G
     checksig(inheritor_pk, inheritor_sig);
 }
 
 fn cold_spend(cold_sig: Signature) {
-    let cold_pk: Pubkey = jet::get_pubkey_from_script(35); // Cold key extracted from script
+    let cold_pk: Pubkey = jet::get_pubkey_from_script(0); // Cold key extracted from script
     checksig(cold_pk, cold_sig);
 }
 

@@ -20,7 +20,7 @@ fn checksig(pk: Pubkey, sig: Signature) {
 fn transfer_spend(sender_sig: Signature, recipient_sig: Signature) {
     let sender_pk: Pubkey = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798; // 1 * G
     checksig(sender_pk, sender_sig);
-    let recipient_pk: Pubkey = jet::get_pubkey_from_script(35);
+    let recipient_pk: Pubkey = jet::get_pubkey_from_script(0);
     checksig(recipient_pk, recipient_sig);
 }
 

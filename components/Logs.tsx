@@ -15,7 +15,7 @@ function linkifyMessage(message: string) {
           href={part}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-blue-400 hover:text-blue-300 underline"
+          className="text-brand hover:text-brand-hover underline"
         >
           {part}
         </a>
@@ -29,20 +29,20 @@ export function Logs() {
   const { state } = useApp();
 
   return (
-    <section className="border border-zinc-800 bg-zinc-900/30 p-6">
-      <h2 className="mb-4 text-lg font-semibold text-zinc-100">Logs</h2>
-      <div className="space-y-2 font-mono text-xs text-zinc-400 max-h-[150px] overflow-y-auto scrollbar-hide">
+    <section className="rounded-xl bg-white p-5">
+      <h2 className="mb-4 text-lg font-semibold text-ink">Logs</h2>
+      <div className="space-y-2 font-mono text-xs text-muted max-h-[150px] overflow-y-auto scrollbar-hide">
         {state.logs.length > 0 ? (
           state.logs.slice().reverse().map((log, index) => (
-            <div key={index} className="text-zinc-400 leading-relaxed">
-              <span className="text-zinc-600 mr-2">
+            <div key={index} className="text-muted leading-relaxed">
+              <span className="text-subtle mr-2">
                 [{log.timestamp.toLocaleTimeString()}]
               </span>
               {linkifyMessage(log.message)}
             </div>
           ))
         ) : (
-          <div className="text-zinc-600 italic">No logs yet...</div>
+          <div className="text-subtle italic">No logs yet...</div>
         )}
       </div>
     </section>

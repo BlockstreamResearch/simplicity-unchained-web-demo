@@ -6,17 +6,18 @@ import { useApp } from '@/contexts/AppContext';
 import { PresetDropdown } from './PresetDropdown';
 import { InfoMenu } from './InfoMenu';
 import { proxyApi } from '@/services/proxyApi';
+import { assertSameProgram } from '@/services/demoFlow';
 import { sendGAEvent } from '@next/third-parties/google';
 
 const PRESETS = [
   { fileName: 'check_opcode.simf', label: 'Check Opcode' },
   { fileName: 'sig_verify_with_pubkey_from_script.simf', label: 'Sig Verify With Pubkey From Script' },
-  { fileName: 'p2ms.simf', label: 'Pay to Multisig (2-of-3)' },
-  { fileName: 'transfer_with_timeout.simf', label: 'Transfer With Timeout' },
-  { fileName: 'escrow_with_delay.simf', label: 'Escrow With Delay' },
-  { fileName: 'last_will.simf', label: 'Last Will' },
-  { fileName: 'hodl_vault.simf', label: 'HODL Vault' },
-  { fileName: 'non_interactive_fee_bump.simf', label: 'Non-Interactive Fee Bump' },
+  { fileName: 'p2ms.simf', label: 'Pay to Multisig (2-of-3)', elementsOnly: true },
+  { fileName: 'transfer_with_timeout.simf', label: 'Transfer With Timeout', elementsOnly: true },
+  { fileName: 'escrow_with_delay.simf', label: 'Escrow With Delay', elementsOnly: true },
+  { fileName: 'last_will.simf', label: 'Last Will', elementsOnly: true },
+  { fileName: 'hodl_vault.simf', label: 'HODL Vault', elementsOnly: true },
+  { fileName: 'non_interactive_fee_bump.simf', label: 'Non-Interactive Fee Bump', elementsOnly: true },
 ];
 
 interface WitnessEntry {
@@ -63,7 +64,7 @@ function normalizeJson(json: string): string {
 }
 
 export function SimplicityProgram() {
-  const { state, updateSimplicityProgram, updateWitProgram, saveSimplicityProgram, addLog, showNotification } = useApp();
+  const { state, updateSimplicityProgram, updateWitProgram, saveSimplicityProgram, addLog, showNotification, setOperation } = useApp();
   const [activeTab, setActiveTab] = useState<'simf' | 'wit'>('simf');
   const code = state.simplicityProgram;
   const wit = state.witProgram;
@@ -156,19 +157,21 @@ export function SimplicityProgram() {
   };
 
   const handleCompileProgram = async () => {
+    if (state.operation) return;
     if (!code.trim()) {
       showNotification("Please enter a Simplicity program (simf is required)");
       return;
     }
 
     setIsCompiling(true);
+    setOperation("preparing", "Compiling the Advanced program and requesting its Simplicity Unchained key");
     try {
       // Parse witness JSON if provided, and include it only if switch is enabled
-      let witnessData: Record<string, { value: string; type: string }> | undefined;
+      let witnessData: Record<string, { value: string; type: string }> | undefined = includeWitness ? {} : undefined;
       if (includeWitness && wit.trim()) {
         try {
           witnessData = JSON.parse(wit);
-        } catch (parseError) {
+        } catch {
           showNotification("Invalid witness JSON format", true);
           setIsCompiling(false);
           return;
@@ -193,18 +196,21 @@ export function SimplicityProgram() {
           jet_env: state.network,
         });
         
-        console.log("Tweaked Public Key:", tweakResponse.tweaked_public_key_hex);
+        console.log("Simplicity Unchained key:", tweakResponse.tweaked_public_key_hex);
         console.log("CMR (Commitment Merkle Root):", tweakResponse.cmr_hex);
+        assertSameProgram(response.cmr_hex, tweakResponse.cmr_hex);
         tweakedPublicKey = tweakResponse.tweaked_public_key_hex;
       } catch (tweakError) {
         const tweakErrorMessage = tweakError instanceof Error ? tweakError.message : "Unknown error";
         console.error("Tweak computation error:", tweakError);
-        addLog(`Failed to compute tweaked public key: ${tweakErrorMessage}`);
+        addLog(`Failed to compute the Simplicity Unchained key: ${tweakErrorMessage}`);
+        showNotification(`Failed to compute the Simplicity Unchained key: ${tweakErrorMessage}`, true);
         
         // Track tweak failure
         sendGAEvent('event', 'error_action', {
           location: 'simplicity_tweak',
         });
+        return;
       }
 
       // Save the compiled program and witness in context (this will add the success log)
@@ -217,7 +223,7 @@ export function SimplicityProgram() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       addLog(`Failed to compile Simplicity program: ${errorMessage}`);
-      showNotification("Failed to compile Simplicity program", true);
+      showNotification(`Failed to compile Simplicity program: ${errorMessage}`, true);
       console.error("Simplicity program compilation error:", error);
       
       // Track compilation failure
@@ -226,21 +232,19 @@ export function SimplicityProgram() {
       });
     } finally {
       setIsCompiling(false);
+      setOperation(null);
     }
   };
 
   return (
-    <section className="border border-zinc-800 bg-zinc-900 p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2 relative">
-          <h2 className="text-lg font-semibold text-zinc-100">
-            Simplicity Program
-          </h2>
-          {/* OPTION 2: InfoMenu in SimplicityProgram (CURRENTLY ACTIVE) */}
+    <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="relative flex items-center gap-1 text-xs text-muted">
           <InfoMenu />
+          <span>Jet reference</span>
         </div>
         <PresetDropdown
-          presets={PRESETS}
+          presets={PRESETS.filter((preset) => state.network === 'elements' || !preset.elementsOnly)}
           onSelect={(simfContent: string, _presetLabel?: string, witContent?: string) => {
             updateSimplicityProgram(simfContent);
             if (witContent !== undefined) {
@@ -254,13 +258,13 @@ export function SimplicityProgram() {
       </div>
       
       {/* Tab Switcher */}
-      <div className="mb-4 flex border-b border-zinc-800">
+      <div className="mb-4 flex border-b border-line">
         <button
           onClick={() => setActiveTab('simf')}
           className={`px-4 py-2 text-sm font-semibold transition-colors ${
             activeTab === 'simf'
-              ? 'text-emerald-400 border-b-2 border-emerald-400'
-              : 'text-zinc-400 hover:text-zinc-200'
+              ? 'text-brand border-b-2 border-brand'
+              : 'text-muted hover:text-ink'
           }`}
         >
           Simplicity
@@ -269,8 +273,8 @@ export function SimplicityProgram() {
           onClick={() => setActiveTab('wit')}
           className={`px-4 py-2 text-sm font-semibold transition-colors ${
             activeTab === 'wit'
-              ? 'text-emerald-400 border-b-2 border-emerald-400'
-              : 'text-zinc-400 hover:text-zinc-200'
+              ? 'text-brand border-b-2 border-brand'
+              : 'text-muted hover:text-ink'
           }`}
         >
           Witness
@@ -279,10 +283,10 @@ export function SimplicityProgram() {
       
       <div className="space-y-4">
         {activeTab === 'simf' ? (
-          <div className="relative flex border border-zinc-700 bg-zinc-950 max-h-[400px]">
+          <div className="relative flex max-h-[400px] overflow-hidden rounded-lg bg-code">
             <div
               ref={lineNumbersRef}
-              className="border-r border-zinc-800 bg-zinc-900/50 px-4 py-3 font-mono text-xs text-zinc-500 select-none overflow-y-hidden"
+              className="border-r border-white/10 bg-white/5 px-4 py-3 font-mono text-xs text-zinc-500 select-none overflow-y-hidden"
               style={{ maxHeight: '400px' }}
             >
               <div>
@@ -303,7 +307,7 @@ export function SimplicityProgram() {
                     {highlightedCode}
                   </pre>
                 ) : (
-                  <span className="text-zinc-600">
+                  <span className="text-zinc-500">
                     // Enter your Simplicity program code here
                   </span>
                 )}
@@ -333,26 +337,26 @@ export function SimplicityProgram() {
                     value={entry.name}
                     onChange={(e) => updateWitnessEntry(entry.id, 'name', e.target.value)}
                     placeholder="Name (e.g., SIGNATURE)"
-                    className="border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                    className="rounded-md border border-line bg-white px-3 py-2 font-mono text-sm text-ink placeholder:text-subtle focus:outline-none focus:border-brand"
                   />
                   <input
                     type="text"
                     value={entry.value}
                     onChange={(e) => updateWitnessEntry(entry.id, 'value', e.target.value)}
                     placeholder="Value (e.g., 0x...)"
-                    className="border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                    className="rounded-md border border-line bg-white px-3 py-2 font-mono text-sm text-ink placeholder:text-subtle focus:outline-none focus:border-brand"
                   />
                   <input
                     type="text"
                     value={entry.type}
                     onChange={(e) => updateWitnessEntry(entry.id, 'type', e.target.value)}
                     placeholder="Type (e.g., Signature)"
-                    className="border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                    className="rounded-md border border-line bg-white px-3 py-2 font-mono text-sm text-ink placeholder:text-subtle focus:outline-none focus:border-brand"
                   />
                 </div>
                 <button
                   onClick={() => removeWitnessEntry(entry.id)}
-                  className="p-2 text-zinc-500 hover:text-red-400 transition-colors"
+                  className="p-2 text-muted hover:text-danger transition-colors"
                   title="Remove entry"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -363,7 +367,7 @@ export function SimplicityProgram() {
             ))}
             <button
               onClick={addWitnessEntry}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-400 hover:text-emerald-400 border border-dashed border-zinc-700 hover:border-emerald-500 transition-colors w-full justify-center"
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-brand border border-dashed border-line hover:border-brand transition-colors w-full justify-center"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -376,19 +380,19 @@ export function SimplicityProgram() {
           <button 
             onClick={handleCompileProgram}
             disabled={isCompiling || !code.trim()}
-            className="bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-brand rounded-md px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isCompiling ? "Compiling..." : "Compile and request tweaked pubkey"}
+            {isCompiling ? "Compiling…" : "Compile and derive Simplicity Unchained key"}
           </button>
-          <label className="flex items-center gap-2 text-xs font-medium text-zinc-400 cursor-pointer hover:text-zinc-300 transition-colors">
+          <label className="flex items-center gap-2 text-xs font-medium text-muted cursor-pointer hover:text-ink transition-colors">
             <span>Include witness</span>
             <button
               type="button"
               role="switch"
               aria-checked={includeWitness}
               onClick={() => setIncludeWitness(!includeWitness)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 focus:ring-offset-zinc-950 ${
-                includeWitness ? 'bg-emerald-600' : 'bg-zinc-700'
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1 focus:ring-offset-white ${
+                includeWitness ? 'bg-brand' : 'bg-pill'
               }`}
             >
               <span
@@ -400,7 +404,7 @@ export function SimplicityProgram() {
           </label>
           {state.savedSimplicityProgram && (
             <svg
-              className="w-5 h-5 text-emerald-500"
+              className="w-5 h-5 text-success"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -414,7 +418,12 @@ export function SimplicityProgram() {
             </svg>
           )}
         </div>
+        {state.savedSimplicityProgram && state.tweakedPublicKey && (
+          <p className="break-all rounded-lg bg-success-tint p-3 font-mono text-xs text-ink">
+            <span className="mr-2 font-sans font-medium text-success">Simplicity Unchained key for this program</span>{state.tweakedPublicKey}
+          </p>
+        )}
       </div>
-    </section>
+    </div>
   );
 }

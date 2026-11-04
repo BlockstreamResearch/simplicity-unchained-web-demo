@@ -31,16 +31,18 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
         const simfContent = await response.text();
 
         // Try to load the corresponding wit file
-        const baseName = fileName.replace('.simf', '');
+        const baseName = fileName.replace(/\.simf$/, '');
         const witFileName = `${baseName}.wit`;
         let witContent: string | undefined = undefined;
 
         try {
-          const witResponse = await fetch(`${presetPath}/${witFileName}`);
-          if (witResponse.ok) {
-            witContent = await witResponse.text();
+          if (fileName.endsWith('.simf')) {
+            const witResponse = await fetch(`${presetPath}/${witFileName}`);
+            if (witResponse.ok) {
+              witContent = await witResponse.text();
+            }
           }
-        } catch (witError) {
+        } catch {
           // It's okay if wit file doesn't exist
           console.log(`No wit file found for ${fileName}`);
         }
@@ -78,7 +80,7 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
       <button
         onClick={() => !isDisabled && setIsDropdownOpen(!isDropdownOpen)}
         disabled={isDisabled}
-        className="flex items-center gap-1 text-sm font-bold text-zinc-100 hover:text-zinc-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center gap-1 text-sm font-bold text-ink hover:text-ink transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Presets
         <svg
@@ -91,23 +93,23 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
         </svg>
       </button>
       {isDropdownOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-zinc-950 border border-zinc-700 shadow-lg z-10">
+        <div className="absolute right-0 mt-2 w-64 bg-white border border-line shadow-lg z-10">
           {presets.map((preset, index) => (
             <div
               key={preset.fileName}
               className={`relative ${
-                index < presets.length - 1 ? 'border-b border-zinc-700' : ''
+                index < presets.length - 1 ? 'border-b border-line' : ''
               }`}
             >
               <button
                 onClick={() => handlePresetSelect(preset.fileName, preset.label)}
-                className="w-full px-4 py-2 text-left text-sm font-bold text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors flex items-center justify-between"
+                className="w-full px-4 py-2 text-left text-sm font-bold text-ink hover:bg-surface hover:text-ink transition-colors flex items-center justify-between"
               >
                 <span>{index + 1}. {preset.label}</span>
                 {preset.description && (
                   <div className="relative group" onClick={(e) => e.stopPropagation()}>
                     <svg
-                      className="w-4 h-4 text-zinc-500 hover:text-zinc-300 cursor-help"
+                      className="w-4 h-4 text-muted hover:text-ink cursor-help"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -120,7 +122,7 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
                       />
                     </svg>
                     <div className="absolute right-0 bottom-full pb-1 hidden group-hover:block z-20 pointer-events-auto">
-                      <div className="w-80 p-3 bg-zinc-800 border border-zinc-600 text-xs text-zinc-300 rounded shadow-lg break-words">
+                      <div className="w-80 p-3 bg-white border border-line text-xs text-ink rounded shadow-lg break-words">
                         {preset.description.split(' ').map((word, idx) => {
                           if (word.startsWith('http://') || word.startsWith('https://')) {
                             return (
@@ -129,7 +131,7 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
                                 href={word}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-400 hover:text-blue-300 underline"
+                                className="text-brand hover:text-brand-hover underline"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {word}
@@ -138,7 +140,7 @@ export function PresetDropdown({ presets, onSelect, presetPath, disabled = false
                           }
                           return <span key={idx}>{word} </span>;
                         })}
-                        <div className="absolute top-full right-4 -mt-1 border-4 border-transparent border-t-zinc-800"></div>
+                        <div className="absolute top-full right-4 -mt-1 border-4 border-transparent border-t-white"></div>
                       </div>
                     </div>
                   </div>

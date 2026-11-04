@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import type { PreparedDemo, TransactionResult } from "@/services/demoFlow";
 
 interface NotificationItem {
   id: string;
@@ -17,10 +18,17 @@ interface AppState {
   bitcoinScript: string;
   compiledHex: string;
   compiledAddress: string;
+  tweakedPublicKey: string;
+  userLeafHash: string;
+  compiledUserPubkey: string;
   inputTransactionHash: string;
   inputIndex: string;
   cosignSecretKey: string;
   network: "elements" | "bitcoin";
+  operation: "preparing" | "sending" | null;
+  progress: string;
+  transactionResult: TransactionResult | null;
+  programOrigin: "guided" | "custom";
   
   savedSimplicityProgram: boolean;
   savedBitcoinScript: boolean;
@@ -30,15 +38,24 @@ interface AppState {
   notifications: NotificationItem[];
 }
 
+export type ServiceStatus = "checking" | "online" | "offline";
+
 interface AppContextType {
   state: AppState;
+  serviceStatus: ServiceStatus;
+  checkService: () => Promise<void>;
   updateSimplicityProgram: (code: string) => void;
   updateWitProgram: (wit: string) => void;
   updateBitcoinScript: (script: string) => void;
   updateTransactionForm: (hash: string, index: string, key: string) => void;
   setNetwork: (network: "elements" | "bitcoin") => void;
+  setOperation: (operation: AppState["operation"], progress?: string) => void;
+  loadPreparedDemo: (demo: PreparedDemo) => void;
+  resetToGuided: () => void;
+  completeTransaction: (result: TransactionResult) => void;
+  clearTransaction: () => void;
   saveSimplicityProgram: (compiledProgramBase64: string, compiledWitnessBase64: string, tweakedPublicKey?: string, includeWitnessForTransaction?: boolean) => void;
-  saveBitcoinScript: (compiledHex: string, address: string) => void;
+  saveBitcoinScript: (compiledHex: string, address: string, userLeafHash: string, userPubkey: string) => void;
   canSendTransaction: () => boolean;
   addLog: (message: string) => void;
   showNotification: (message: string, isError?: boolean) => void;
@@ -56,10 +73,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     bitcoinScript: "",
     compiledHex: "",
     compiledAddress: "",
+    tweakedPublicKey: "",
+    userLeafHash: "",
+    compiledUserPubkey: "",
     inputTransactionHash: "",
     inputIndex: "",
     cosignSecretKey: "",
     network: "elements",
+    operation: null,
+    progress: "",
+    transactionResult: null,
+    programOrigin: "guided",
     savedSimplicityProgram: false,
     savedBitcoinScript: false,
     compiledWithWitnessForTransaction: false,
@@ -71,9 +95,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       simplicityProgram: code,
+      programOrigin: "custom",
       compiledProgramBase64: "",
+      compiledWitnessBase64: "",
+      tweakedPublicKey: "",
+      compiledHex: "",
+      compiledAddress: "",
+      userLeafHash: "",
+      compiledUserPubkey: "",
+      savedBitcoinScript: false,
       savedSimplicityProgram: false,
       compiledWithWitnessForTransaction: false,
+      transactionResult: null,
     }));
   };
 
@@ -81,7 +114,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       witProgram: wit,
+      programOrigin: "custom",
       compiledProgramBase64: "",
+      compiledWitnessBase64: "",
       savedSimplicityProgram: false,
       compiledWithWitnessForTransaction: false,
     }));
@@ -91,23 +126,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       bitcoinScript: script,
+      programOrigin: "custom",
       compiledHex: "",
       compiledAddress: "",
+      userLeafHash: "",
+      compiledUserPubkey: "",
       savedBitcoinScript: false,
+      transactionResult: null,
     }));
   };
 
-  const updateTransactionForm = (hash: string, index: string, key: string) => {
+  const updateTransactionForm = useCallback((hash: string, index: string, key: string) => {
     setState((prev) => ({
       ...prev,
       inputTransactionHash: hash,
       inputIndex: index,
       cosignSecretKey: key,
+      ...(key !== prev.cosignSecretKey ? {
+        compiledHex: "",
+        compiledAddress: "",
+        userLeafHash: "",
+        compiledUserPubkey: "",
+        savedBitcoinScript: false,
+        transactionResult: null,
+      } : {}),
     }));
-  };
+  }, []);
 
   const setNetwork = (network: "elements" | "bitcoin") => {
-    setState((prev) => ({
+    setState((prev) => prev.network === network || prev.operation ? prev : ({
       ...prev,
       network,
       compiledProgramBase64: "",
@@ -116,9 +163,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
       compiledWithWitnessForTransaction: false,
       compiledHex: "",
       compiledAddress: "",
+      tweakedPublicKey: "",
+      userLeafHash: "",
+      compiledUserPubkey: "",
       savedBitcoinScript: false,
+      inputTransactionHash: "",
+      inputIndex: "",
+      transactionResult: null,
     }));
   };
+
+  const setOperation = useCallback((operation: AppState["operation"], progress = "") => {
+    setState((prev) => ({ ...prev, operation, progress }));
+  }, []);
+
+  const resetToGuided = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      programOrigin: "guided",
+      compiledProgramBase64: "",
+      compiledWitnessBase64: "",
+      tweakedPublicKey: "",
+      compiledHex: "",
+      compiledAddress: "",
+      userLeafHash: "",
+      compiledUserPubkey: "",
+      savedSimplicityProgram: false,
+      savedBitcoinScript: false,
+      compiledWithWitnessForTransaction: false,
+      transactionResult: null,
+    }));
+  }, []);
+
+  const loadPreparedDemo = useCallback((demo: PreparedDemo) => {
+    setState((prev) => ({
+      ...prev, ...demo,
+      programOrigin: "guided",
+      savedSimplicityProgram: true,
+      savedBitcoinScript: true,
+      compiledWithWitnessForTransaction: true,
+      inputTransactionHash: "",
+      inputIndex: "",
+      transactionResult: null,
+    }));
+  }, []);
+
+  const completeTransaction = useCallback((transactionResult: TransactionResult) => {
+    setState((prev) => ({
+      ...prev, transactionResult,
+      inputTransactionHash: "",
+      inputIndex: "",
+    }));
+  }, []);
+
+  const clearTransaction = useCallback(() => {
+    setState((prev) => ({ ...prev, transactionResult: null }));
+  }, []);
 
   const saveSimplicityProgram = (compiledProgramBase64: string, compiledWitnessBase64: string, tweakedPublicKey?: string, includeWitnessForTransaction?: boolean) => {
     if (state.simplicityProgram.trim() && compiledProgramBase64) {
@@ -126,27 +226,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...prev,
         compiledProgramBase64,
         compiledWitnessBase64,
+        tweakedPublicKey: tweakedPublicKey || "",
+        ...(tweakedPublicKey !== prev.tweakedPublicKey ? {
+          compiledHex: "",
+          compiledAddress: "",
+          userLeafHash: "",
+          compiledUserPubkey: "",
+          savedBitcoinScript: false,
+        } : {}),
         savedSimplicityProgram: true,
         compiledWithWitnessForTransaction: includeWitnessForTransaction || false,
       }));
       const logMessage = tweakedPublicKey 
-        ? `Simplicity program compiled and saved successfully. Tweaked Public Key: ${tweakedPublicKey}`
+        ? `Simplicity program compiled and saved successfully. Simplicity Unchained key: ${tweakedPublicKey}`
         : "Simplicity program compiled and saved successfully";
       addLog(logMessage);
       showNotification("Simplicity program compiled and saved successfully");
     }
   };
 
-  const saveBitcoinScript = (compiledHex: string, address: string) => {
+  const saveBitcoinScript = (compiledHex: string, address: string, userLeafHash: string, userPubkey: string) => {
     if (state.bitcoinScript.trim() && compiledHex && address) {
       setState((prev) => ({
         ...prev,
         compiledHex,
         compiledAddress: address,
+        userLeafHash,
+        compiledUserPubkey: userPubkey,
         savedBitcoinScript: true,
       }));
       addLog(`Bitcoin script compiled - Address: ${address}`);
-      showNotification("Bitcoin script saved and P2WSH address generated");
+      addLog(`Recovery leaf hash: ${userLeafHash}`);
+      showNotification("Recovery script saved and P2TR address generated");
     }
   };
 
@@ -154,14 +265,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return state.savedSimplicityProgram && state.savedBitcoinScript && state.compiledWithWitnessForTransaction;
   };
 
-  const addLog = (message: string) => {
+  const addLog = useCallback((message: string) => {
+    const timestamp = new Date();
     setState((prev) => ({
       ...prev,
-      logs: [...prev.logs, { timestamp: new Date(), message }],
+      logs: [...prev.logs, { timestamp, message }],
     }));
-  };
+  }, []);
 
-  const showNotification = (message: string, isError = false) => {
+  const removeNotification = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      notifications: prev.notifications.filter((n) => n.id !== id),
+    }));
+  }, []);
+
+  const showNotification = useCallback((message: string, isError = false) => {
     const id = `notification-${Date.now()}-${Math.random()}`;
     const notification: NotificationItem = {
       id,
@@ -178,24 +297,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTimeout(() => {
       removeNotification(id);
     }, 7000);
-  };
+  }, [removeNotification]);
 
-  const removeNotification = (id: string) => {
-    setState((prev) => ({
-      ...prev,
-      notifications: prev.notifications.filter((n) => n.id !== id),
-    }));
-  };
+  const [serviceStatus, setServiceStatus] = useState<ServiceStatus>("checking");
+  const checkService = useCallback(async () => {
+    try {
+      const response = await fetch("/api/proxy/status", { cache: "no-store" });
+      setServiceStatus(response.ok ? "online" : "offline");
+    } catch {
+      setServiceStatus("offline");
+    }
+  }, []);
+
+  useEffect(() => {
+    const initial = setTimeout(() => void checkService(), 0);
+    const timer = setInterval(() => void checkService(), 15000);
+    return () => { clearTimeout(initial); clearInterval(timer); };
+  }, [checkService]);
 
   return (
     <AppContext.Provider
       value={{
         state,
+        serviceStatus,
+        checkService,
         updateSimplicityProgram,
         updateWitProgram,
         updateBitcoinScript,
         updateTransactionForm,
         setNetwork,
+        setOperation,
+        loadPreparedDemo,
+        resetToGuided,
+        completeTransaction,
+        clearTransaction,
         saveSimplicityProgram,
         saveBitcoinScript,
         canSendTransaction,

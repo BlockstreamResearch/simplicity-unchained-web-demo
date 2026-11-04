@@ -54,9 +54,9 @@ function NotificationItem({
         visible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-4"
       }`}
     >
-      <div className={`${isError ? 'bg-red-600' : 'bg-emerald-600'} text-white px-6 py-3 rounded shadow-lg flex items-center gap-3 min-w-[300px]`}>
+      <div className={`flex min-w-[300px] max-w-md items-center gap-3 rounded-xl border bg-white px-4 py-3 text-ink shadow-lg ${isError ? 'border-danger/40' : 'border-line'}`}>
         <svg
-          className="w-5 h-5 flex-shrink-0"
+          className={`h-5 w-5 flex-shrink-0 rounded-full p-0.5 ${isError ? "bg-danger-tint text-danger" : "bg-success-tint text-success"}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -77,14 +77,14 @@ function NotificationItem({
             />
           )}
         </svg>
-        <span className="flex-1 text-sm">{message}</span>
+        <span className="flex-1 break-words text-sm">{message}</span>
         <div className="relative w-5 h-5 flex-shrink-0">
           <svg className="w-5 h-5 -rotate-90" viewBox="0 0 20 20">
             <circle
               cx="10"
               cy="10"
               r={radius}
-              stroke="rgba(255,255,255,0.2)"
+              stroke="#ececee"
               strokeWidth="2"
               fill="none"
             />
@@ -92,7 +92,7 @@ function NotificationItem({
               cx="10"
               cy="10"
               r={radius}
-              stroke="white"
+              stroke="#2308c7"
               strokeWidth="2"
               fill="none"
               strokeDasharray={circumference}
@@ -104,7 +104,7 @@ function NotificationItem({
         </div>
         <button
           onClick={handleClose}
-          className={`transition-colors flex-shrink-0 ${isError ? 'text-white hover:text-red-100' : 'text-white hover:text-emerald-100'}`}
+          className="flex-shrink-0 text-muted transition-colors hover:text-ink"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path

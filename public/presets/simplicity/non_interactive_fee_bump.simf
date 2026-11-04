@@ -67,7 +67,7 @@ fn total_fee_check() {
 
 fn main() {
     // Extract pubkey from script at the start of execution
-    let pk: Pubkey = jet::get_pubkey_from_script(35);
+    let pk: Pubkey = jet::get_pubkey_from_script(0);
     
     let sighash : u256 = sighash_nifb();
     total_fee_check();

@@ -1,28 +1,37 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Tokens sampled from the Lending UX design system. */
+@theme {
+  --color-brand: #2308c7;
+  --color-brand-hover: #1b069e;
+  --color-brand-soft: #9083e1;
+  --color-brand-tint: #eeebfc;
+  --color-ink: #111113;
+  --color-muted: #6f6f71;
+  --color-subtle: #a1a1a6;
+  --color-surface: #fafafa;
+  --color-line: #ececee;
+  --color-pill: #ebebec;
+  --color-success: #3fae52;
+  --color-success-dot: #5ec66f;
+  --color-success-tint: #e9f7ec;
+  --color-warning: #c9731d;
+  --color-warning-dot: #eb9034;
+  --color-warning-tint: #fcf3e0;
+  --color-info: #3762e3;
+  --color-danger: #d93f3f;
+  --color-danger-tint: #fdecec;
+  --color-code: #111218;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #ffffff;
+  color: var(--color-ink);
 }
 
 /* Hide scrollbars */

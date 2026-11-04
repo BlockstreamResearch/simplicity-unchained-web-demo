@@ -24,7 +24,7 @@ fn checksigfromstack(pk: Pubkey, bytes: [u32; 2], sig: Signature) {
 
 fn main() {
     // Extract oracle pubkey from script (the external price data provider)
-    let oracle_pk: Pubkey = jet::get_pubkey_from_script(35);
+    let oracle_pk: Pubkey = jet::get_pubkey_from_script(0);
     
     let min_height: Height = 1000;
     let oracle_height: Height = witness::ORACLE_HEIGHT;

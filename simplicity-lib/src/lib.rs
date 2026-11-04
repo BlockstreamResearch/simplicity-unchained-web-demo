@@ -4,8 +4,12 @@ pub mod create_psbt;
 pub mod create_pset;
 pub mod finalize;
 pub mod finalize_psbt;
+pub mod jets;
 pub mod sighash;
 pub mod sighash_psbt;
+mod taproot;
+#[cfg(test)]
+mod tests;
 
 // Re-export main functions for easier access
 pub use compiler::compile;

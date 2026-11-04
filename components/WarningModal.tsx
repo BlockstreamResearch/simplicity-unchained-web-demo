@@ -22,13 +22,13 @@ export function WarningModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-yellow-600/50 rounded-lg shadow-2xl max-w-2xl w-full mx-4 p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-sm">
+      <div className="mx-4 w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
         {/* Warning Icon */}
         <div className="flex items-center justify-center mb-4">
-          <div className="bg-yellow-600/20 rounded-full p-3">
+          <div className="rounded-full bg-warning-tint p-3">
             <svg
-              className="w-8 h-8 text-yellow-500"
+              className="h-7 w-7 text-warning"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -44,18 +44,18 @@ export function WarningModal() {
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-bold text-yellow-500 text-center mb-4">
+        <h2 className="mb-4 text-center text-xl font-semibold text-ink">
           Security Warning - Demo Environment
         </h2>
 
         {/* Warning Content */}
-        <div className="bg-yellow-950/20 border border-yellow-600/30 rounded-lg p-4 mb-4">
-          <div className="space-y-2 text-zinc-300 text-sm">
+        <div className="mb-5 rounded-xl bg-surface p-4">
+          <div className="space-y-2 text-sm text-muted">
             <p>
-              This is a demonstration application operating on <strong>Liquid Testnet</strong> and <strong>Bitcoin Testnet4</strong>.
+              This is a demonstration application operating on <strong className="text-ink">Liquid Testnet</strong> and <strong className="text-ink">Bitcoin Testnet4</strong>.
             </p>
             <p>
-              <strong>NEVER</strong> use your actual secret keys. This is a demo environment where keys are used for demonstration purposes only. Your keys are <strong>NOT SECURE</strong> in this environment.
+              <strong className="text-ink">NEVER</strong> use your actual secret keys. This is a demo environment where keys are used for demonstration purposes only. Your keys are <strong className="text-ink">NOT SECURE</strong> in this environment.
             </p>
             <p>
               It's better to get UTXOs from faucets and never, under any condition, use your real secret keys.
@@ -67,7 +67,7 @@ export function WarningModal() {
         <div className="flex justify-center">
           <button
             onClick={handleAccept}
-            className="bg-yellow-600 hover:bg-yellow-700 text-zinc-900 font-semibold px-6 py-2 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
+            className="rounded-md bg-brand px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             I Understand - Continue to Demo
           </button>

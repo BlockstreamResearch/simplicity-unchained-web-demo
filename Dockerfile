@@ -7,10 +7,10 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy package files
-COPY package.json ./
+COPY package.json pnpm-lock.yaml ./
 
 # Install dependencies
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
@@ -24,7 +24,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # NEXT_PUBLIC_* values are compiled into the client bundle during `pnpm build`.
-ARG NEXT_PUBLIC_SIMPLICITY_SERVICE_URL=http://localhost:8080
+ARG NEXT_PUBLIC_SIMPLICITY_SERVICE_URL=http://localhost:30431
 ARG NEXT_PUBLIC_GOOGLE_ANALYTICS_ID=""
 ENV NEXT_PUBLIC_SIMPLICITY_SERVICE_URL=$NEXT_PUBLIC_SIMPLICITY_SERVICE_URL
 ENV NEXT_PUBLIC_GOOGLE_ANALYTICS_ID=$NEXT_PUBLIC_GOOGLE_ANALYTICS_ID

@@ -1,4 +1,6 @@
 import { API_CONFIG } from "@/config/api.config";
+import { fetchExplorerOutput } from "@/services/explorer";
+import { DEMO_NETWORKS, transactionExplorerUrl } from "@/utils/demo";
 import {
   compile as wasmCompile,
   convert_script as wasmConvertScript,
@@ -39,17 +41,22 @@ export interface CompileRequest {
 
 export interface CompileResponse {
   program_base64: string;
+  /** Commitment Merkle root the service tweaks its key with. */
+  cmr_hex: string;
   witness_base64?: string;
 }
 
 export interface ConvertRequest {
   script: string;
   network: string;
+  service_pubkey: string;
+  user_pubkey: string;
 }
 
 export interface ConvertResponse {
   hex: string;
   address: string;
+  user_leaf_hash_hex: string;
 }
 
 export interface CreatePsetRequest {
@@ -70,7 +77,7 @@ export interface CreatePsetResponse {
 export interface SighashPsetRequest {
   pset_hex: string;
   input_index: number;
-  redeem_script_hex: string;
+  network: string;
 }
 
 export interface SighashPsetResponse {
@@ -82,7 +89,7 @@ export interface SighashPsetResponse {
 
 export interface FinalizePsetRequest {
   pset_hex: string;
-  redeem_script_hex: string;
+  network: string;
   input_index: number;
   signature_hex: string;
   public_key_hex: string;
@@ -116,7 +123,6 @@ export interface CreatePsbtResponse {
 export interface SighashPsbtRequest {
   psbt_hex: string;
   input_index: number;
-  redeem_script_hex: string;
 }
 
 export interface SighashPsbtResponse {
@@ -128,7 +134,6 @@ export interface SighashPsbtResponse {
 
 export interface FinalizePsbtRequest {
   psbt_hex: string;
-  redeem_script_hex: string;
   input_index: number;
   signature_hex: string;
   public_key_hex: string;
@@ -161,6 +166,8 @@ export interface SimplicitySignPsetRequest {
   redeem_script_hex: string;
   program: string;
   witness: string;
+  user_pubkey: string;
+  user_leaf_hash_hex: string;
 }
 
 export interface SimplicitySignPsetResponse {
@@ -177,6 +184,8 @@ export interface SimplicitySignPsbtRequest {
   redeem_script_hex: string;
   program: string;
   witness: string;
+  user_pubkey: string;
+  user_leaf_hash_hex: string;
 }
 
 export interface SimplicitySignPsbtResponse {
@@ -214,28 +223,11 @@ class ProxyApiService {
   ): Promise<{ asset: string; value: number; scriptpubkey: string }> {
     const apiUrl =
       network === "liquid"
-        ? `https://blockstream.info/liquid/api/tx/${txid}`
-        : `https://blockstream.info/liquidtestnet/api/tx/${txid}`;
-
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch transaction ${txid}: ${response.statusText}`,
-      );
-    }
-
-    const txData = await response.json();
-    const output = txData.vout[vout];
-
-    if (!output) {
-      throw new Error(`Output ${vout} not found in transaction ${txid}`);
-    }
-
-    return {
-      asset: output.asset,
-      value: output.value,
-      scriptpubkey: output.scriptpubkey,
-    };
+        ? "https://blockstream.info/liquid/api"
+        : DEMO_NETWORKS.elements.api;
+    const output = await fetchExplorerOutput(apiUrl, txid, vout);
+    if (!output.asset) throw new Error("Missing explicit asset in the funding output.");
+    return { ...output, asset: output.asset };
   }
 
   /**
@@ -248,29 +240,11 @@ class ProxyApiService {
   ): Promise<{ value: number; scriptpubkey: string }> {
     const apiUrl =
       network === "bitcoin"
-        ? `https://blockstream.info/api/tx/${txid}`
+        ? "https://blockstream.info/api"
         : network === "testnet"
-          ? `https://blockstream.info/testnet/api/tx/${txid}`
-          : `https://mempool.space/testnet4/api/tx/${txid}`;
-
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch transaction ${txid}: ${response.statusText}`,
-      );
-    }
-
-    const txData = await response.json();
-    const output = txData.vout[vout];
-
-    if (!output) {
-      throw new Error(`Output ${vout} not found in transaction ${txid}`);
-    }
-
-    return {
-      value: output.value,
-      scriptpubkey: output.scriptpubkey,
-    };
+          ? "https://blockstream.info/testnet/api"
+          : DEMO_NETWORKS.bitcoin.api;
+    return fetchExplorerOutput(apiUrl, txid, vout);
   }
 
   private async request<T>(
@@ -306,7 +280,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Request failed: ${error.message}`);
       }
-      throw new Error("Request failed with unknown error");
+      throw new Error(`Request failed: ${String(error)}`);
     }
   }
 
@@ -321,7 +295,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Compile failed: ${error.message}`);
       }
-      throw new Error("Compile failed with unknown error");
+      throw new Error(`Compile failed: ${String(error)}`);
     }
   }
 
@@ -336,7 +310,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Convert failed: ${error.message}`);
       }
-      throw new Error("Convert failed with unknown error");
+      throw new Error(`Convert failed: ${String(error)}`);
     }
   }
 
@@ -367,7 +341,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Create PSET failed: ${error.message}`);
       }
-      throw new Error("Create PSET failed with unknown error");
+      throw new Error(`Create PSET failed: ${String(error)}`);
     }
   }
 
@@ -382,7 +356,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Sighash PSET failed: ${error.message}`);
       }
-      throw new Error("Sighash PSET failed with unknown error");
+      throw new Error(`Sighash PSET failed: ${String(error)}`);
     }
   }
 
@@ -395,11 +369,6 @@ class ProxyApiService {
     try {
       if (!request.pset_hex) {
         throw new Error("pset_hex is required but was undefined or empty");
-      }
-      if (!request.redeem_script_hex) {
-        throw new Error(
-          "redeem_script_hex is required but was undefined or empty",
-        );
       }
       if (!request.signature_hex) {
         throw new Error("signature_hex is required but was undefined or empty");
@@ -415,7 +384,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Finalize PSET failed: ${error.message}`);
       }
-      throw new Error("Finalize PSET failed with unknown error");
+      throw new Error(`Finalize PSET failed: ${String(error)}`);
     }
   }
 
@@ -445,7 +414,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Create PSBT failed: ${error.message}`);
       }
-      throw new Error("Create PSBT failed with unknown error");
+      throw new Error(`Create PSBT failed: ${String(error)}`);
     }
   }
 
@@ -460,7 +429,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Sighash PSBT failed: ${error.message}`);
       }
-      throw new Error("Sighash PSBT failed with unknown error");
+      throw new Error(`Sighash PSBT failed: ${String(error)}`);
     }
   }
 
@@ -473,11 +442,6 @@ class ProxyApiService {
     try {
       if (!request.psbt_hex) {
         throw new Error("psbt_hex is required but was undefined or empty");
-      }
-      if (!request.redeem_script_hex) {
-        throw new Error(
-          "redeem_script_hex is required but was undefined or empty",
-        );
       }
       if (!request.signature_hex) {
         throw new Error("signature_hex is required but was undefined or empty");
@@ -493,7 +457,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Finalize PSBT failed: ${error.message}`);
       }
-      throw new Error("Finalize PSBT failed with unknown error");
+      throw new Error(`Finalize PSBT failed: ${String(error)}`);
     }
   }
 
@@ -504,10 +468,7 @@ class ProxyApiService {
     request: BroadcastTransactionRequest,
     network: "elements" | "bitcoin" = "elements",
   ): Promise<BroadcastTransactionResponse> {
-    const url =
-      network === "bitcoin"
-        ? "https://mempool.space/testnet4/api/tx"
-        : "https://blockstream.info/liquidtestnet/api/tx";
+    const url = `${DEMO_NETWORKS[network].api}/tx`;
 
     try {
       const response = await fetch(url, {
@@ -525,11 +486,8 @@ class ProxyApiService {
         );
       }
 
-      const txid = await response.text();
-      const explorer_url =
-        network === "bitcoin"
-          ? `https://mempool.space/testnet4/tx/${txid}`
-          : `https://blockstream.info/liquidtestnet/tx/${txid}?expand`;
+      const txid = (await response.text()).trim();
+      const explorer_url = transactionExplorerUrl(network, txid);
 
       return {
         txid,
@@ -539,7 +497,7 @@ class ProxyApiService {
       if (error instanceof Error) {
         throw new Error(`Failed to broadcast transaction: ${error.message}`);
       }
-      throw new Error("Failed to broadcast transaction with unknown error");
+      throw new Error(`Failed to broadcast transaction: ${String(error)}`);
     }
   }
 

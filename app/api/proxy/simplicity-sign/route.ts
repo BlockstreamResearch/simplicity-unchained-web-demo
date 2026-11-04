@@ -1,38 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { API_CONFIG } from "@/config/api.config";
+import { proxyServiceRequest } from "@/services/serviceProxy";
 
-const SIMPLICITY_SERVICE_URL =
-  process.env.NEXT_PUBLIC_SIMPLICITY_SERVICE_URL || "http://localhost:8080";
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-
-    const response = await fetch(
-      `${SIMPLICITY_SERVICE_URL}/simplicity-unchained/sign/pset`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        { error: errorText || "Failed to sign with Simplicity service" },
-        { status: response.status },
-      );
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Proxy error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
-  }
+export async function POST(request: Request) {
+  return proxyServiceRequest(request, "sign/pset", API_CONFIG.SIMPLICITY_SERVICE_URL);
 }

@@ -1,19 +1,26 @@
 use anyhow::{Result, anyhow};
-use wasm_bindgen::prelude::*;
-use serde::{Deserialize, Serialize};
+use elements::bitcoin::hashes::Hash as _;
 use elements::opcodes::all;
 use elements::{Address, AddressParams, bitcoin, script::Builder};
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use wasm_bindgen::prelude::*;
+
+use crate::taproot::{NUMS_KEY, multisig_script};
 
 #[derive(Deserialize)]
 pub struct ConvertRequest {
     pub script: String,
     pub network: String,
+    pub service_pubkey: String,
+    pub user_pubkey: String,
 }
 
 #[derive(Serialize)]
 pub struct ConvertResponse {
     pub hex: String,
     pub address: String,
+    pub user_leaf_hash_hex: String,
 }
 
 #[wasm_bindgen]
@@ -21,22 +28,16 @@ pub fn convert_script(request_json: JsValue) -> Result<JsValue, JsValue> {
     let request: ConvertRequest = serde_wasm_bindgen::from_value(request_json)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse request: {}", e)))?;
 
-    let result = parse_human_readable(&request.script, request.network);
+    let result = convert(&request);
 
     match result {
-        Ok((script, address)) => {
-            let response = ConvertResponse {
-                hex: hex::encode(script),
-                address,
-            };
-            serde_wasm_bindgen::to_value(&response)
-                .map_err(|e| JsValue::from_str(&format!("Failed to serialize response: {}", e)))
-        }
+        Ok(response) => serde_wasm_bindgen::to_value(&response)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize response: {}", e))),
         Err(e) => Err(JsValue::from_str(&format!("Invalid script: {}", e))),
     }
 }
 
-pub fn parse_human_readable(input: &str, network: String) -> Result<(Vec<u8>, String)> {
+pub fn parse_human_readable(input: &str) -> Result<Vec<u8>> {
     let mut builder = Builder::new();
 
     let mut expected_len: Option<usize> = None;
@@ -171,6 +172,7 @@ pub fn parse_human_readable(input: &str, network: String) -> Result<(Vec<u8>, St
             "OP_CODESEPARATOR" => elements::opcodes::all::OP_CODESEPARATOR,
             "OP_CHECKSIG" => elements::opcodes::all::OP_CHECKSIG,
             "OP_CHECKSIGVERIFY" => elements::opcodes::all::OP_CHECKSIGVERIFY,
+            "OP_CHECKSIGADD" => elements::opcodes::all::OP_CHECKSIGADD,
             "OP_CHECKMULTISIG" => elements::opcodes::all::OP_CHECKMULTISIG,
             "OP_CHECKMULTISIGVERIFY" => elements::opcodes::all::OP_CHECKMULTISIGVERIFY,
             "OP_CHECKSIGFROMSTACK" => elements::opcodes::all::OP_CHECKSIGFROMSTACK,
@@ -220,22 +222,51 @@ pub fn parse_human_readable(input: &str, network: String) -> Result<(Vec<u8>, St
         builder = builder.push_opcode(op);
     }
 
-    let script = builder.into_script();
+    anyhow::ensure!(expected_len.is_none(), "Missing data after OP_PUSHBYTES");
+    Ok(builder.into_script().into_bytes())
+}
+
+pub fn convert(request: &ConvertRequest) -> Result<ConvertResponse> {
+    let script_bytes = parse_human_readable(&request.script)?;
+    let service = bitcoin::PublicKey::from_str(&request.service_pubkey)?;
+    let user = bitcoin::PublicKey::from_str(&request.user_pubkey)?;
+    anyhow::ensure!(
+        service.compressed && user.compressed,
+        "Public keys must be compressed"
+    );
+    let secp = bitcoin::secp256k1::Secp256k1::verification_only();
+    let internal_key = bitcoin::XOnlyPublicKey::from_str(NUMS_KEY)?;
+    let multisig = multisig_script(&service, &user);
+    let network = request.network.as_str();
 
     // Try Elements networks first
-    if let Ok(network_type) = ElementsNetwork::try_from(network.as_str()) {
+    if let Ok(network_type) = ElementsNetwork::try_from(network) {
         let params = match network_type {
             ElementsNetwork::Elements => &AddressParams::ELEMENTS,
             ElementsNetwork::Liquid => &AddressParams::LIQUID,
             ElementsNetwork::LiquidTestnet => &AddressParams::LIQUID_TESTNET,
         };
 
-        let address = Address::p2wsh(&script, None, params);
-        return Ok((script.into_bytes(), address.to_string()));
+        let script = elements::Script::from(script_bytes);
+        let user_leaf_hash = elements::taproot::TapLeafHash::from_script(
+            &script,
+            elements::taproot::LeafVersion::default(),
+        );
+        let spend_info = elements::taproot::TaprootBuilder::new()
+            .add_leaf(1, elements::Script::from(multisig.into_bytes()))?
+            .add_leaf(1, script.clone())?
+            .finalize(&secp, internal_key)
+            .map_err(|_| anyhow!("Failed to finalize Elements taproot tree"))?;
+        let address = Address::p2tr_tweaked(spend_info.output_key(), None, params);
+        return Ok(ConvertResponse {
+            hex: hex::encode(script.as_bytes()),
+            address: address.to_string(),
+            user_leaf_hash_hex: hex::encode(user_leaf_hash.to_byte_array()),
+        });
     }
 
     // Try Bitcoin networks
-    if let Ok(network_type) = BitcoinNetwork::try_from(network.as_str()) {
+    if let Ok(network_type) = BitcoinNetwork::try_from(network) {
         let network_params = match network_type {
             BitcoinNetwork::Bitcoin => bitcoin::Network::Bitcoin,
             BitcoinNetwork::Testnet => bitcoin::Network::Testnet,
@@ -244,9 +275,20 @@ pub fn parse_human_readable(input: &str, network: String) -> Result<(Vec<u8>, St
             BitcoinNetwork::Regtest => bitcoin::Network::Regtest,
         };
 
-        let bitcoin_script = bitcoin::ScriptBuf::from_bytes(script.into_bytes());
-        let address = bitcoin::address::Address::p2wsh(&bitcoin_script, network_params);
-        return Ok((bitcoin_script.into_bytes(), address.to_string()));
+        let script = bitcoin::ScriptBuf::from_bytes(script_bytes);
+        let user_leaf_hash =
+            bitcoin::TapLeafHash::from_script(&script, bitcoin::taproot::LeafVersion::TapScript);
+        let spend_info = bitcoin::taproot::TaprootBuilder::new()
+            .add_leaf(1, multisig)?
+            .add_leaf(1, script.clone())?
+            .finalize(&secp, internal_key)
+            .map_err(|_| anyhow!("Failed to finalize Bitcoin taproot tree"))?;
+        let address = bitcoin::Address::p2tr_tweaked(spend_info.output_key(), network_params);
+        return Ok(ConvertResponse {
+            hex: hex::encode(script.as_bytes()),
+            address: address.to_string(),
+            user_leaf_hash_hex: hex::encode(user_leaf_hash.to_byte_array()),
+        });
     }
 
     Err(anyhow!(

@@ -2,532 +2,196 @@
 
 import { useApp } from "@/contexts/AppContext";
 import { proxyApi } from "@/services/proxyApi";
-import { useState, useRef, useEffect } from "react";
-import { API_CONFIG } from "@/config/api.config";
+import { useState } from "react";
+import { fetchExplorerOutput } from "@/services/explorer";
+import { sendDemoTransaction } from "@/services/demoFlow";
+import { createSpendPlan, DEMO_NETWORKS, type DemoNetwork } from "@/utils/demo";
 import { secp256k1, schnorr } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { sendGAEvent } from '@next/third-parties/google';
+import { sendGAEvent } from "@next/third-parties/google";
+import { buttonPrimary, buttonSecondary, Callout, formatSats, inputClass, KeyValue } from "./ui";
 
-export function SendTransaction() {
-  const { state, updateTransactionForm, canSendTransaction, addLog, showNotification } = useApp();
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const [showSignModal, setShowSignModal] = useState(false);
-  const [messageToSign, setMessageToSign] = useState("");
-  const [isHexMode, setIsHexMode] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+export function derivePublicKey(secretKey: string) {
+  if (!/^[0-9a-fA-F]{64}$/.test(secretKey)) return null;
+  try {
+    return Buffer.from(secp256k1.getPublicKey(Buffer.from(secretKey, "hex"), true)).toString("hex");
+  } catch {
+    return null;
+  }
+}
 
-  const handleHashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    updateTransactionForm(e.target.value, state.inputIndex, state.cosignSecretKey);
+export function CosignKey() {
+  const { state, updateTransactionForm, addLog, showNotification } = useApp();
+  const [showSign, setShowSign] = useState(false);
+  const [message, setMessage] = useState("");
+  const [isHex, setIsHex] = useState(false);
+  const [signature, setSignature] = useState<{ hash: string; signature: string } | null>(null);
+  const publicKey = derivePublicKey(state.cosignSecretKey);
+  const setKey = (key: string) => updateTransactionForm(state.inputTransactionHash, state.inputIndex, key);
+
+  const generate = () => {
+    const key = Buffer.from(secp256k1.utils.randomSecretKey()).toString("hex");
+    setKey(key);
+    addLog(`Keypair generated - Public Key: ${derivePublicKey(key)}`);
+    showNotification("New key generated");
   };
 
-  const handleIndexChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    updateTransactionForm(state.inputTransactionHash, e.target.value, state.cosignSecretKey);
-  };
-
-  const handleKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    updateTransactionForm(state.inputTransactionHash, state.inputIndex, e.target.value);
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showMenu]);
-
-  const handleSignMessage = async () => {
-    if (!messageToSign.trim()) {
-      showNotification("Please enter a message to sign", true);
-      return;
-    }
-
-    if (!state.cosignSecretKey) {
-      showNotification("Please enter a secret key", true);
-      return;
-    }
-
+  const sign = () => {
     try {
-      // Convert text to hex if not in hex mode
-      let messageHex = messageToSign;
-      if (!isHexMode) {
-        // Convert text to hex
-        messageHex = Array.from(messageToSign)
-          .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
-          .join('');
-      }
-
-      // Convert hex string to bytes
-      const messageBytes = Uint8Array.from(Buffer.from(messageHex, 'hex'));
-
-      const messageHash = sha256(messageBytes);
-      
-      // Convert private key hex to bytes
-      const privateKey = Buffer.from(state.cosignSecretKey, 'hex');
-      
-      // Sign using schnorr (it will hash the message internally)
-      const signature = schnorr.sign(messageHash, privateKey);
-      const signatureHex = Buffer.from(signature).toString('hex');
-      
-      // Get public key
-      const publicKey = secp256k1.getPublicKey(privateKey, true);
-      
-      const publicKeyHex = Buffer.from(publicKey).toString('hex');    
-      const messageHashHex = Buffer.from(messageHash).toString('hex');
-
-      // Log the results
-      addLog(`Message signed successfully`);
-      addLog(`Message Hash: ${messageHashHex}`);
-      addLog(`Signature: ${signatureHex}`);
-      
-      console.log("Public Key:", publicKeyHex);
-      console.log("Message Hash:", messageHashHex);
-      console.log("Signature:", signatureHex);
-
-      showNotification("Message signed successfully!");
-      setShowSignModal(false);
-      setMessageToSign("");
+      if (!publicKey) throw new Error("Enter or generate a valid key first.");
+      if (!message.trim()) throw new Error("Enter a message to sign.");
+      if (isHex && !/^(?:[0-9a-fA-F]{2})+$/.test(message.trim())) throw new Error("Hex messages need an even number of hex digits.");
+      const bytes = isHex ? Buffer.from(message.trim(), "hex") : new TextEncoder().encode(message);
+      const hash = sha256(bytes);
+      const sig = schnorr.sign(hash, Buffer.from(state.cosignSecretKey, "hex"));
+      const result = { hash: Buffer.from(hash).toString("hex"), signature: Buffer.from(sig).toString("hex") };
+      setSignature(result);
+      addLog(`Message signed · hash ${result.hash} · signature ${result.signature}`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      addLog(`Failed to sign message: ${errorMessage}`);
-      showNotification("Failed to sign message", true);
-      console.error("Sign message error:", error);
+      showNotification(error instanceof Error ? error.message : String(error), true);
     }
-  };
-
-  const handleSendTransaction = async () => {
-    if (!canSendTransaction()) {
-      showNotification(getDisabledReason() || "Please compile Simplicity Program (with witness included) and Bitcoin Script first");
-      return;
-    }
-
-    // Validate required fields
-    if (!state.inputTransactionHash || !state.inputIndex || !state.cosignSecretKey) {
-      showNotification("Please fill in all transaction fields");
-      return;
-    }
-
-    setIsSending(true);
-
-    try {
-      const isBitcoin = state.network === "bitcoin";
-      
-      if (isBitcoin) {
-        // Bitcoin PSBT flow
-        // Step 1: Create PSBT
-        const createPsbtResponse = await proxyApi.createPsbt({
-          inputs: [`${state.inputTransactionHash}:${state.inputIndex}`],
-          outputs: [
-            `${state.compiledAddress}:4000`,
-          ],
-          network: API_CONFIG.BITCOIN_NETWORK,
-        });
-        addLog(`PSBT created with ${createPsbtResponse.inputs} input(s) and ${createPsbtResponse.outputs} output(s)`);
-        console.log("Created PSBT:", createPsbtResponse.psbt);
-
-        // Step 2: Sign with Simplicity service
-        const simplicitySignResponse = await proxyApi.simplicitySignPsbt({
-          psbt_hex: createPsbtResponse.psbt,
-          input_index: 0,
-          redeem_script_hex: state.compiledHex,
-          program: state.compiledProgramBase64,
-          witness: state.compiledWitnessBase64,
-        });
-        addLog(`Simplicity Unchained signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
-        console.log("Simplicity signed PSBT:", simplicitySignResponse.psbt_hex);
-
-        // Step 3: Compute sighash for cosigner
-        const sighashResponse = await proxyApi.sighashPsbt({
-          psbt_hex: simplicitySignResponse.psbt_hex,
-          input_index: 0,
-          redeem_script_hex: state.compiledHex,
-        });
-        console.log("Sighash:", sighashResponse);
-
-        if (!sighashResponse.sighash_hex) {
-          throw new Error(`Sighash response missing sighash_hex field. Response: ${JSON.stringify(sighashResponse)}`);
-        }
-
-        // Step 4: Sign locally with cosign key
-        const messageHash = Buffer.from(sighashResponse.sighash_hex, 'hex');
-        const privateKey = Buffer.from(state.cosignSecretKey, 'hex');
-        const signatureBytes = secp256k1.sign(messageHash, privateKey, {prehash: false});
-        const signature = secp256k1.Signature.fromBytes(signatureBytes);
-        const publicKey = secp256k1.getPublicKey(privateKey, true);
-        
-        // Append sighash type (0x01 for SIGHASH_ALL)
-        const signatureWithSighashType = new Uint8Array([...signature.toBytes('der'), 0x01]);
-        const signatureHex = Buffer.from(signatureWithSighashType).toString('hex');
-        const publicKeyHex = Buffer.from(publicKey).toString('hex');
-        
-        addLog(`Local signature created`);
-        console.log("Signature:", signatureHex);
-        console.log("Public Key:", publicKeyHex);
-
-        // Step 5: Finalize PSBT with signature
-        const finalizeResponse = await proxyApi.finalizePsbt({
-          psbt_hex: simplicitySignResponse.psbt_hex,
-          redeem_script_hex: state.compiledHex,
-          input_index: 0,
-          signature_hex: signatureHex,
-          public_key_hex: publicKeyHex,
-        });
-        addLog(`PSBT finalized`);
-        console.log("Final transaction hex:", finalizeResponse.transaction_hex);
-
-        // Step 6: Broadcast transaction
-        const broadcastResponse = await proxyApi.broadcastTransaction({
-          transaction_hex: finalizeResponse.transaction_hex,
-        }, "bitcoin");
-        
-        addLog("Transaction broadcast successfully!");
-        addLog(`View transaction: ${broadcastResponse.explorer_url}`);
-        showNotification("Transaction sent successfully!");
-        
-        console.log("Broadcast result:", broadcastResponse);
-        
-        // Track successful transaction
-        sendGAEvent('event', 'success_action', {
-          location: 'transaction_send',
-        });
-      } else {
-        // Elements PSET flow
-        // Step 1: Create PSET
-        const createPsetResponse = await proxyApi.createPset({
-          inputs: [`${state.inputTransactionHash}:${state.inputIndex}`],
-          outputs: [
-            `${state.compiledAddress}:99000`,
-            "fee:1000"
-          ],
-          asset_id: null,
-          network: API_CONFIG.NETWORK,
-        });
-        addLog(`PSET created with ${createPsetResponse.inputs} input(s) and ${createPsetResponse.outputs} output(s)`);
-        console.log("Created PSET:", createPsetResponse.pset);
-
-        // Step 2: Sign with Simplicity service
-        const simplicitySignResponse = await proxyApi.simplicitySignPset({
-          pset_hex: createPsetResponse.pset,
-          input_index: 0,
-          redeem_script_hex: state.compiledHex,
-          program: state.compiledProgramBase64,
-          witness: state.compiledWitnessBase64,
-        });
-        addLog(`Simplicity Unchained signature added (${simplicitySignResponse.partial_sigs_count} partial signature(s))`);
-        console.log("Simplicity signed PSET:", simplicitySignResponse.pset_hex);
-        // Step 3: Compute sighash for cosigner
-        const sighashResponse = await proxyApi.sighashPset({
-          pset_hex: simplicitySignResponse.pset_hex,
-          input_index: 0,
-          redeem_script_hex: state.compiledHex,
-        });
-        console.log("Sighash:", sighashResponse);
-
-        if (!sighashResponse.sighash_hex) {
-          throw new Error(`Sighash response missing sighash_hex field. Response: ${JSON.stringify(sighashResponse)}`);
-        }
-
-        // Step 4: Sign locally with cosign key
-        const messageHash = Buffer.from(sighashResponse.sighash_hex, 'hex');
-        const privateKey = Buffer.from(state.cosignSecretKey, 'hex');
-        const signatureBytes = secp256k1.sign(messageHash, privateKey, {prehash: false});
-        const signature = secp256k1.Signature.fromBytes(signatureBytes);
-        const publicKey = secp256k1.getPublicKey(privateKey, true);
-        
-        // Append sighash type (0x01 for SIGHASH_ALL)
-        const signatureWithSighashType = new Uint8Array([...signature.toBytes('der'), 0x01]);
-        const signatureHex = Buffer.from(signatureWithSighashType).toString('hex');
-        const publicKeyHex = Buffer.from(publicKey).toString('hex');
-        
-        addLog(`Local signature created`);
-
-        // Step 5: Finalize PSET with signature
-        const finalizeResponse = await proxyApi.finalizePset({
-          pset_hex: simplicitySignResponse.pset_hex,
-          redeem_script_hex: state.compiledHex,
-          input_index: 0,
-          signature_hex: signatureHex,
-          public_key_hex: publicKeyHex,
-        });
-        addLog(`PSET finalized`);
-        console.log("Final transaction hex:", finalizeResponse.transaction_hex);
-
-        // Step 6: Broadcast transaction
-        const broadcastResponse = await proxyApi.broadcastTransaction({
-          transaction_hex: finalizeResponse.transaction_hex,
-        }, "elements");
-        
-        addLog("Transaction broadcast successfully!");
-        addLog(`View transaction: ${broadcastResponse.explorer_url}`);
-        showNotification("Transaction sent successfully!");
-        
-        console.log("Broadcast result:", broadcastResponse);
-        
-        // Track successful transaction
-        sendGAEvent('event', 'success_action', {
-          location: 'transaction_send',
-        });
-      }
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      addLog(`Transaction failed: ${errorMessage}`);
-      showNotification("Transaction failed", true);
-      console.error("Transaction error:", error);
-      
-      // Track transaction failure
-      sendGAEvent('event', 'error_action', {
-        location: 'transaction_send',
-      });
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const handleGenerateKeypair = async () => {
-    setIsGenerating(true);
-    try {
-      // Generate a random private key
-      const privateKey = secp256k1.utils.randomSecretKey();
-      const privateKeyHex = Buffer.from(privateKey).toString('hex');
-      
-      // Get the public key
-      const publicKey = secp256k1.getPublicKey(privateKey, true); // true for compressed
-      const publicKeyHex = Buffer.from(publicKey).toString('hex');
-      
-      // Update the form with the generated secret key
-      updateTransactionForm(
-        state.inputTransactionHash,
-        state.inputIndex,
-        privateKeyHex
-      );
-      
-      // Log the public key
-      addLog(`Keypair generated - Public Key: ${publicKeyHex}`);
-      console.log("Generated Public Key:", publicKeyHex);
-      console.log("Generated Secret Key:", privateKeyHex);
-      
-      showNotification("Keypair generated successfully");
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      addLog(`Failed to generate keypair: ${errorMessage}`);
-      showNotification("Failed to generate keypair", true);
-      console.error("Keypair generation error:", error);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const isDisabled = !canSendTransaction();
-
-  const getDisabledReason = () => {
-    const missing: string[] = [];
-    if (!state.savedSimplicityProgram) missing.push("Simplicity Program not compiled");
-    if (!state.savedBitcoinScript) missing.push("Bitcoin Script not compiled");
-    if (!state.compiledWithWitnessForTransaction) missing.push("Witness not included in compilation");
-    return missing.join(", ");
   };
 
   return (
-    <section className="border border-zinc-800 bg-zinc-900 p-6">
-      <h2 className="mb-4 text-lg font-semibold text-zinc-100">
-        Send Transaction
-      </h2>
-      <div className="space-y-4">
-        <div>
-          <label className="mb-2 block text-sm text-zinc-400">
-            Input Transaction Hash
-          </label>
-          <input
-            type="text"
-            value={state.inputTransactionHash}
-            onChange={handleHashChange}
-            disabled={isGenerating}
-            className="w-full border border-zinc-700 bg-zinc-950 px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-            placeholder="Enter transaction hash..."
-          />
-        </div>
-        <div>
-          <label className="mb-2 block text-sm text-zinc-400">
-            Input Index
-          </label>
-          <input
-            type="number"
-            value={state.inputIndex}
-            onChange={handleIndexChange}
-            disabled={isGenerating}
-            className="w-full border border-zinc-700 bg-zinc-950 px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            placeholder="Enter vout index..."
-          />
-        </div>
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <label className="block text-sm text-zinc-400">
-              Cosign Secret Key
-            </label>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleGenerateKeypair}
-                disabled={isGenerating}
-                className="group relative p-1 text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Generate Keypair"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                  />
-                </svg>
-                <span className="absolute right-0 bottom-full mb-1 hidden group-hover:block whitespace-nowrap bg-zinc-800 border border-zinc-600 px-2 py-1 text-xs text-zinc-300 rounded shadow-lg">
-                  Generate Keypair
-                </span>
-              </button>
-              <div className="relative" ref={menuRef}>
-                <button
-                  onClick={() => setShowMenu(!showMenu)}
-                  className="group relative p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-                  title="Secret Key Actions"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                    />
-                  </svg>
-                </button>
-                {showMenu && (
-                  <div className="absolute right-0 top-8 z-50 w-48 border border-zinc-700 bg-zinc-900 shadow-xl">
-                    <button
-                      onClick={() => {
-                        setShowMenu(false);
-                        setShowSignModal(true);
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
-                    >
-                      Sign Message
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <input
-            type="text"
-            value={state.cosignSecretKey}
-            onChange={handleKeyChange}
-            className="w-full border border-zinc-700 bg-zinc-950 px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none"
-            placeholder="Enter secret key..."
-          />
-        </div>
-        <button
-          onClick={handleSendTransaction}
-          disabled={isDisabled || isSending}
-          className={`px-4 py-1.5 text-xs font-bold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
-            isDisabled || isSending
-              ? "bg-zinc-700 cursor-not-allowed opacity-50"
-              : "bg-emerald-600 hover:bg-emerald-700"
-          }`}
-        >
-          {isSending ? "Sending transaction..." : "Send a transaction"}
-        </button>
-        {isDisabled && (
-          <p className="text-xs text-zinc-500 italic">
-            {getDisabledReason()}
-          </p>
-        )}
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <input
+          aria-label="Secret key"
+          type="text"
+          value={state.cosignSecretKey}
+          onChange={(event) => setKey(event.target.value.trim())}
+          placeholder="64 hex characters, or generate one"
+          className={inputClass}
+          spellCheck={false}
+        />
+        <button type="button" onClick={generate} className={`${buttonSecondary} shrink-0`}>Generate</button>
       </div>
-
-      {/* Sign Message Modal */}
-      {showSignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowSignModal(false)}>
-          <div className="border border-zinc-800 bg-zinc-900 p-6 shadow-xl w-96" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-zinc-100">Sign Message</h3>
-              <button
-                onClick={() => setShowSignModal(false)}
-                className="p-1 hover:bg-zinc-800 transition-colors rounded"
-                title="Close"
-              >
-                <svg className="w-5 h-5 text-zinc-400 hover:text-zinc-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm text-zinc-400">
-                  Message
-                </label>
-                <textarea
-                  value={messageToSign}
-                  onChange={(e) => setMessageToSign(e.target.value)}
-                  className="w-full border border-zinc-700 bg-zinc-950 px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none resize-none"
-                  placeholder="Enter message to sign..."
-                  rows={4}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-zinc-400">
-                  Input Type
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm ${!isHexMode ? 'text-zinc-100 font-medium' : 'text-zinc-500'}`}>
-                    Text
-                  </span>
-                  <button
-                    onClick={() => setIsHexMode(!isHexMode)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      isHexMode ? 'bg-emerald-600' : 'bg-zinc-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        isHexMode ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                  <span className={`text-sm ${isHexMode ? 'text-zinc-100 font-medium' : 'text-zinc-500'}`}>
-                    Hex
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleSignMessage}
-                className="w-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                Sign
-              </button>
-            </div>
-          </div>
+      {state.cosignSecretKey && !publicKey && <p className="text-xs text-danger">Not a valid secp256k1 secret key (64 hex characters).</p>}
+      {publicKey && (
+        <div className="rounded-lg bg-surface p-3">
+          <p className="text-xs text-muted">Public key</p>
+          <p className="mt-1 break-all font-mono text-xs text-ink">{publicKey}</p>
         </div>
       )}
-    </section>
+      <button type="button" onClick={() => setShowSign((value) => !value)} disabled={!publicKey} className="text-xs font-medium text-brand hover:underline disabled:text-subtle disabled:no-underline">
+        {showSign ? "Hide message signing" : "Sign a message for a witness…"}
+      </button>
+      {showSign && publicKey && (
+        <div className="space-y-2 rounded-lg bg-surface p-3">
+          <p className="text-xs text-muted">Produces a BIP-340 signature over SHA-256(message). Paste it into a <code>Signature</code> witness.</p>
+          <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={2} placeholder={isHex ? "Hex bytes" : "Message text"} className={inputClass} />
+          <div className="flex items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-xs text-muted">
+              <input type="checkbox" checked={isHex} onChange={(event) => setIsHex(event.target.checked)} className="accent-brand" />
+              Message is hex
+            </label>
+            <button type="button" onClick={sign} className={buttonSecondary}>Sign</button>
+          </div>
+          {signature && (
+            <dl className="rounded-md bg-white px-3">
+              <KeyValue label="Message hash"><span className="break-all font-mono text-[11px]">0x{signature.hash}</span></KeyValue>
+              <KeyValue label="Signature"><span className="break-all font-mono text-[11px]">0x{signature.signature}</span></KeyValue>
+            </dl>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ManualSpend() {
+  const { state, updateTransactionForm, canSendTransaction, addLog, showNotification, setOperation, completeTransaction } = useApp();
+  const [isSending, setIsSending] = useState(false);
+  const [transactionError, setTransactionError] = useState("");
+  const [review, setReview] = useState<{
+    funding: { txid: string; vout: number; value: number; asset?: string };
+    address: string;
+    publicKey: string;
+    network: DemoNetwork;
+  } | null>(null);
+  const currentReview = review && review.address === state.compiledAddress
+    && review.publicKey === state.compiledUserPubkey && review.network === state.network
+    && review.funding.txid === state.inputTransactionHash.trim()
+    && review.funding.vout === Number(state.inputIndex) ? review : null;
+  const ready = canSendTransaction();
+  const disabled = !ready || Boolean(state.operation) || isSending || !state.inputTransactionHash.trim() || state.inputIndex === "";
+
+  const handleSend = async () => {
+    setTransactionError("");
+    setIsSending(true);
+    setOperation("sending", currentReview ? "Creating the transaction" : "Reading the funding output");
+    try {
+      if (!currentReview) {
+        const txid = state.inputTransactionHash.trim();
+        const vout = Number(state.inputIndex);
+        const output = await fetchExplorerOutput(DEMO_NETWORKS[state.network].api, txid, vout);
+        createSpendPlan(output.value);
+        if (state.network === "elements" && output.asset !== DEMO_NETWORKS.elements.asset) {
+          throw new Error("Use an explicit Liquid Testnet L-BTC output.");
+        }
+        setReview({
+          funding: { ...output, txid, vout }, address: state.compiledAddress,
+          publicKey: state.compiledUserPubkey, network: state.network,
+        });
+        return;
+      }
+      const result = await sendDemoTransaction(state, currentReview.funding, proxyApi, (message) => {
+        setOperation("sending", message);
+        addLog(message);
+      });
+      completeTransaction(result);
+      setReview(null);
+      addLog(`Transaction broadcast: ${result.explorer_url}`);
+      showNotification("Transaction broadcast. Open it in the explorer.");
+      sendGAEvent("event", "success_action", { location: "transaction_send" });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      setTransactionError(errorMessage);
+      addLog(`Transaction failed: ${errorMessage}`);
+      showNotification("Transaction failed", true);
+      sendGAEvent("event", "error_action", { location: "transaction_send" });
+    } finally {
+      setIsSending(false);
+      setOperation(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">
+        Only needed when automatic funding detection cannot see your output. Uses the same co-sign and broadcast flow as Step 3.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-[1fr_7rem]">
+        <input
+          aria-label="Funding transaction ID"
+          type="text"
+          value={state.inputTransactionHash}
+          onChange={(event) => updateTransactionForm(event.target.value, state.inputIndex, state.cosignSecretKey)}
+          placeholder="Funding transaction ID"
+          className={inputClass}
+        />
+        <input
+          aria-label="Output index"
+          type="number"
+          min={0}
+          value={state.inputIndex}
+          onChange={(event) => updateTransactionForm(state.inputTransactionHash, event.target.value, state.cosignSecretKey)}
+          placeholder="Output #"
+          className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+        />
+      </div>
+      {currentReview && (
+        <dl className="rounded-lg bg-surface px-3">
+          <KeyValue label="Funding input">{formatSats(currentReview.funding.value)}</KeyValue>
+          <KeyValue label="Returned to address">{formatSats(createSpendPlan(currentReview.funding.value).outputValue)}</KeyValue>
+          <KeyValue label="Network fee">{formatSats(createSpendPlan(currentReview.funding.value).fee)}</KeyValue>
+        </dl>
+      )}
+      <button type="button" onClick={() => void handleSend()} disabled={disabled} className={buttonPrimary}>
+        {isSending ? "Working…" : currentReview ? "Co-sign and broadcast" : "Review output"}
+      </button>
+      {!ready && <p className="text-xs text-muted">Finish steps A–C first.</p>}
+      {transactionError && <Callout tone="danger">{transactionError}</Callout>}
+    </div>
   );
 }
