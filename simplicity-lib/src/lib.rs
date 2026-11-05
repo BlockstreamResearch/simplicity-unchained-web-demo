@@ -12,11 +12,13 @@ mod taproot;
 mod tests;
 
 // Re-export main functions for easier access
+pub use approval_hash::bitcoin_approval_hash;
 pub use compiler::compile;
-pub use converter::convert_script;
+pub use converter::{convert_script, encode_script};
 pub use create_psbt::create_psbt;
 pub use create_pset::create_pset;
 pub use finalize::finalize_pset;
 pub use finalize_psbt::finalize_psbt;
 pub use sighash::sighash_pset;
 pub use sighash_psbt::sighash_psbt;
+pub mod approval_hash;

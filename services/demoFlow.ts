@@ -7,6 +7,7 @@ import type { proxyApi } from "./proxyApi";
 
 export interface PreparedProgram {
   network: DemoNetwork;
+  compiledCmr: string;
   compiledProgramBase64: string;
   compiledWitnessBase64: string;
   compiledHex: string;
@@ -27,7 +28,8 @@ export interface TransactionResult {
   fee: number;
 }
 
-type PreparationApi = Pick<typeof proxyApi, "compile" | "tweak" | "convert">;
+type AddressApi = Pick<typeof proxyApi, "encodeScript" | "tweak" | "convert">;
+type PreparationApi = Pick<typeof proxyApi, "compile"> & AddressApi;
 type SigningApi = Pick<typeof proxyApi,
   "createPsbt" | "createPset" | "simplicitySignPsbt" | "simplicitySignPset"
   | "sighashPsbt" | "sighashPset" | "finalizePsbt" | "finalizePset" | "broadcastTransaction">;
@@ -37,6 +39,37 @@ export function assertSameProgram(browserCmr: string, serviceCmr: string) {
   if (browserCmr.toLowerCase() !== serviceCmr.toLowerCase()) {
     throw new Error(`The service decoded a different program (CMR ${serviceCmr}, compiled ${browserCmr}). The browser's jet definitions are out of date with the service.`);
   }
+}
+
+export async function prepareAddress(
+  network: DemoNetwork,
+  program: { program_base64: string; cmr_hex: string },
+  script: string,
+  userPubkey: string,
+  api: AddressApi,
+) {
+  const scriptHex = await api.encodeScript(script);
+  const tweak = await api.tweak({
+    program: program.program_base64,
+    jet_env: network,
+    redeem_script_hex: scriptHex,
+  });
+  assertSameProgram(program.cmr_hex, tweak.cmr_hex);
+  const converted = await api.convert({
+    script,
+    network: DEMO_NETWORKS[network].network,
+    service_pubkey: tweak.tweaked_public_key_hex,
+    user_pubkey: userPubkey,
+  });
+  if (converted.hex !== scriptHex) {
+    throw new Error("The recovery script changed after deriving the service key. Build the address again.");
+  }
+  return {
+    compiledHex: scriptHex,
+    compiledAddress: converted.address,
+    tweakedPublicKey: tweak.tweaked_public_key_hex,
+    userLeafHash: converted.user_leaf_hash_hex,
+  };
 }
 
 export async function prepareDemo(
@@ -55,24 +88,15 @@ export async function prepareDemo(
     environment: network,
     include_debug: false,
   });
-  progress("Requesting the program-tweaked Simplicity Unchained key");
-  const tweak = await api.tweak({ program: compiled.program_base64, jet_env: network });
-  assertSameProgram(compiled.cmr_hex, tweak.cmr_hex);
-  progress("Building the cooperative and recovery Taproot leaves");
-  const converted = await api.convert({
-    script: source.bitcoinScript,
-    network: DEMO_NETWORKS[network].network,
-    service_pubkey: tweak.tweaked_public_key_hex,
-    user_pubkey: source.compiledUserPubkey,
-  });
+  progress("Binding the service key to the program and exact recovery script");
+  const address = await prepareAddress(network, compiled, source.bitcoinScript, source.compiledUserPubkey, api);
+  progress("Cooperative and recovery Taproot leaves ready");
   return {
     ...source, network,
     compiledProgramBase64: compiled.program_base64,
     compiledWitnessBase64: compiled.witness_base64 || "",
-    compiledHex: converted.hex,
-    compiledAddress: converted.address,
-    tweakedPublicKey: tweak.tweaked_public_key_hex,
-    userLeafHash: converted.user_leaf_hash_hex,
+    compiledCmr: compiled.cmr_hex,
+    ...address,
   };
 }
 

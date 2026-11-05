@@ -1,8 +1,8 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use simplicityhl::{
-    ResolvedType, Value, WitnessNameToValueMap, WitnessValues, ast::JetHinter,
-    parse::ParseFromStr, str::Identifier,
+    ResolvedType, Value, WitnessNameToValueMap, WitnessValues, ast::JetHinter, parse::ParseFromStr,
+    str::Identifier,
 };
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
@@ -33,7 +33,7 @@ fn default_environment() -> Environment {
 #[derive(Debug, Serialize)]
 pub struct CompileResponse {
     pub program_base64: String,
-    /// Commitment Merkle root; the service tweaks its key with this value.
+    /// Program CMR; the service commits to this and the exact recovery script bytes.
     pub cmr_hex: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub witness_base64: Option<String>,

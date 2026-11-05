@@ -24,6 +24,13 @@ pub struct ConvertResponse {
 }
 
 #[wasm_bindgen]
+pub fn encode_script(script: &str) -> Result<String, JsValue> {
+    parse_human_readable(script)
+        .map(hex::encode)
+        .map_err(|e| JsValue::from_str(&format!("Invalid script: {e}")))
+}
+
+#[wasm_bindgen]
 pub fn convert_script(request_json: JsValue) -> Result<JsValue, JsValue> {
     let request: ConvertRequest = serde_wasm_bindgen::from_value(request_json)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse request: {}", e)))?;

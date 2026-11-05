@@ -59,7 +59,7 @@ export const DEMO_PROGRAM_NOTES: Record<DemoScenario, string[]> = {
   signature: [
     "get_pubkey_from_script(0) takes the public key embedded in your recovery script.",
     "bip_0340_verify checks the SIG witness is a valid Schnorr signature by that key over a fixed message hash.",
-    "Only someone holding the recovery key can produce the witness, so only they can get the oracle to co-sign.",
+    "This fixed-message witness is replayable. It demonstrates key authorization, not per-transaction approval.",
   ],
 };
 

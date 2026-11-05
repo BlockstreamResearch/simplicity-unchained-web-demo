@@ -24,15 +24,20 @@ pub const GET_PUBKEY_FROM_SCRIPT_CMR: [u8; 32] = [
     0x27, 0xea, 0xb0, 0x90, 0x68, 0xb0, 0x35, 0xaf, 0x61, 0x97, 0x13, 0x33, 0x5b, 0x73, 0xd2, 0x52,
     0x0e, 0xcc, 0x02, 0x09, 0x00, 0x67, 0xc8, 0xfc, 0xca, 0xbb, 0x4d, 0x72, 0xa6, 0x55, 0xcd, 0xcb,
 ];
+pub const TX_APPROVAL_HASH_CMR: [u8; 32] = [
+    0xf0, 0xed, 0x96, 0xee, 0x8f, 0xbf, 0x1a, 0x69, 0xbe, 0xb2, 0x0d, 0xeb, 0x3a, 0x7a, 0x9b, 0x74,
+    0x8b, 0xdc, 0x18, 0xda, 0x28, 0x4d, 0x15, 0x43, 0x8d, 0xeb, 0xc7, 0xd4, 0xfa, 0xeb, 0x99, 0x62,
+];
 
 macro_rules! extension_jets {
-    ($name:ident, $hinter:ident, $base:ident) => {
-        /// The base jets plus `get_opcode_from_script` and `get_pubkey_from_script`.
+    ($name:ident, $hinter:ident, $base:ident $(, $approval:ident)?) => {
+        /// The base jets plus the service's environment-specific custom jets.
         #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
         pub enum $name {
             Base($base),
             GetOpcodeFromScript,
             GetPubkeyFromScript,
+            $($approval,)?
         }
 
         impl Jet for $name {
@@ -41,6 +46,7 @@ macro_rules! extension_jets {
                     Self::Base(jet) => jet.cmr(),
                     Self::GetOpcodeFromScript => Cmr::from_byte_array(GET_OPCODE_FROM_SCRIPT_CMR),
                     Self::GetPubkeyFromScript => Cmr::from_byte_array(GET_PUBKEY_FROM_SCRIPT_CMR),
+                    $(Self::$approval => Cmr::from_byte_array(TX_APPROVAL_HASH_CMR),)?
                 }
             }
 
@@ -48,6 +54,7 @@ macro_rules! extension_jets {
                 match self {
                     Self::Base(jet) => jet.source_ty(),
                     Self::GetOpcodeFromScript | Self::GetPubkeyFromScript => TypeName(b"c"),
+                    $(Self::$approval => TypeName(b"1"),)?
                 }
             }
 
@@ -56,6 +63,7 @@ macro_rules! extension_jets {
                     Self::Base(jet) => jet.target_ty(),
                     Self::GetOpcodeFromScript => TypeName(b"c"),
                     Self::GetPubkeyFromScript => TypeName(b"h"),
+                    $(Self::$approval => TypeName(b"h"),)?
                 }
             }
 
@@ -64,6 +72,7 @@ macro_rules! extension_jets {
                     Self::Base(jet) => jet.encode(w),
                     Self::GetOpcodeFromScript => w.write_bits_be(62, 6),
                     Self::GetPubkeyFromScript => w.write_bits_be(126, 7),
+                    $(Self::$approval => w.write_bits_be(127, 7),)?
                 }
             }
 
@@ -79,6 +88,7 @@ macro_rules! extension_jets {
                     Self::GetOpcodeFromScript | Self::GetPubkeyFromScript => {
                         Cost::from_milliweight(100)
                     }
+                    $(Self::$approval => Cost::from_milliweight(356),)?
                 }
             }
 
@@ -93,6 +103,7 @@ macro_rules! extension_jets {
                     Self::Base(jet) => fmt::Display::fmt(jet, f),
                     Self::GetOpcodeFromScript => f.write_str("get_opcode_from_script"),
                     Self::GetPubkeyFromScript => f.write_str("get_pubkey_from_script"),
+                    $(Self::$approval => f.write_str("tx_approval_hash"),)?
                 }
             }
         }
@@ -104,6 +115,7 @@ macro_rules! extension_jets {
                 match s {
                     "get_opcode_from_script" => Ok(Self::GetOpcodeFromScript),
                     "get_pubkey_from_script" => Ok(Self::GetPubkeyFromScript),
+                    $("tx_approval_hash" => Ok(Self::$approval),)?
                     _ => s.parse::<$base>().map(Self::Base),
                 }
             }
@@ -116,6 +128,7 @@ macro_rules! extension_jets {
                     Self::GetOpcodeFromScript | Self::GetPubkeyFromScript => {
                         SourceJetClassification::Unary
                     }
+                    $(Self::$approval => SourceJetClassification::Custom(vec![]),)?
                 }
             }
 
@@ -126,6 +139,7 @@ macro_rules! extension_jets {
                     Self::GetPubkeyFromScript => {
                         TargetJetClassification::Custom(BuiltinAlias::Pubkey.into())
                     }
+                    $(Self::$approval => TargetJetClassification::Unary,)?
                 }
             }
 
@@ -133,6 +147,7 @@ macro_rules! extension_jets {
                 match self {
                     Self::Base(jet) => jet.is_disabled(),
                     Self::GetOpcodeFromScript | Self::GetPubkeyFromScript => false,
+                    $(Self::$approval => false,)?
                 }
             }
 
@@ -174,5 +189,5 @@ macro_rules! extension_jets {
     };
 }
 
-extension_jets!(CoreExtension, CoreExtensionHinter, Core);
+extension_jets!(CoreExtension, CoreExtensionHinter, Core, TxApprovalHash);
 extension_jets!(ElementsExtension, ElementsExtensionHinter, Elements);

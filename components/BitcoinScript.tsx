@@ -5,7 +5,7 @@ import { highlightBitcoinScript } from "@/utils/bitcoinScriptHighlighter";
 import { useApp } from "@/contexts/AppContext";
 import { PresetDropdown } from "./PresetDropdown";
 import { proxyApi } from "@/services/proxyApi";
-import { API_CONFIG } from "@/config/api.config";
+import { prepareAddress } from "@/services/demoFlow";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sendGAEvent } from "@next/third-parties/google";
 import { recoveryScriptForKey } from "@/utils/demo";
@@ -27,7 +27,7 @@ export function BitcoinScript() {
 
   const handleSaveScript = async () => {
     if (state.operation) return;
-    if (!script.trim() || !state.tweakedPublicKey || !state.cosignSecretKey) {
+    if (!script.trim() || !state.savedSimplicityProgram || !state.cosignSecretKey) {
       showNotification("Compile the Simplicity program and enter or generate a cosign key first", true);
       return;
     }
@@ -40,13 +40,14 @@ export function BitcoinScript() {
       const userPubkey = Buffer.from(secp256k1.getPublicKey(
         Buffer.from(state.cosignSecretKey, "hex"), true,
       )).toString("hex");
-      const response = await proxyApi.convert({
+      const response = await prepareAddress(
+        state.network,
+        { program_base64: state.compiledProgramBase64, cmr_hex: state.compiledCmr },
         script,
-        network: state.network === "elements" ? API_CONFIG.NETWORK : API_CONFIG.BITCOIN_NETWORK,
-        service_pubkey: state.tweakedPublicKey,
-        user_pubkey: userPubkey,
-      });
-      saveBitcoinScript(response.hex, response.address, response.user_leaf_hash_hex, userPubkey);
+        userPubkey,
+        proxyApi,
+      );
+      saveBitcoinScript(response.compiledHex, response.compiledAddress, response.userLeafHash, userPubkey, response.tweakedPublicKey);
       sendGAEvent("event", "success_action", { location: "bitcoin_script_compile" });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -113,6 +114,7 @@ export function BitcoinScript() {
       {state.savedBitcoinScript && (
         <div className="space-y-2 rounded-lg bg-success-tint p-3">
           <p className="text-xs font-medium text-success">Address ready: oracle + user cooperative leaf and this recovery leaf.</p>
+          <p className="break-all font-mono text-xs text-ink">Script-bound service key: {state.tweakedPublicKey}</p>
           <p className="break-all font-mono text-xs text-ink">{state.compiledAddress}</p>
           <button type="button" onClick={scrollToFunding} className={buttonPrimary}>Fund it in Step 2 ↑</button>
         </div>

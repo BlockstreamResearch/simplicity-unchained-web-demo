@@ -1,4 +1,4 @@
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use elements::bitcoin::{self, PublicKey};
 use std::str::FromStr;
 
@@ -28,6 +28,68 @@ pub fn multisig_keys(script: &[u8]) -> Result<[bitcoin::XOnlyPublicKey; 2]> {
         bitcoin::XOnlyPublicKey::from_slice(&script[1..33])?,
         bitcoin::XOnlyPublicKey::from_slice(&script[35..67])?,
     ])
+}
+
+pub fn bitcoin_cooperative_leaf(
+    input: &bitcoin::psbt::Input,
+) -> Result<(&bitcoin::taproot::ControlBlock, &bitcoin::ScriptBuf)> {
+    let output = &input
+        .witness_utxo
+        .as_ref()
+        .context("Missing witness UTXO")?
+        .script_pubkey;
+    ensure!(output.is_p2tr(), "Input is not P2TR");
+    let key = bitcoin::XOnlyPublicKey::from_slice(&output.as_bytes()[2..])?;
+    let secp = bitcoin::secp256k1::Secp256k1::verification_only();
+    let mut candidates = input
+        .tap_scripts
+        .iter()
+        .filter(|(control, (script, version))| {
+            *version == bitcoin::taproot::LeafVersion::TapScript
+                && control.leaf_version == *version
+                && multisig_keys(script.as_bytes()).is_ok()
+                && control.verify_taproot_commitment(&secp, key, script)
+        });
+    let (control, (script, _)) = candidates
+        .next()
+        .context("No committed canonical multisig leaf")?;
+    ensure!(
+        candidates.next().is_none(),
+        "Ambiguous committed multisig leaves"
+    );
+    Ok((control, script))
+}
+
+pub fn elements_cooperative_leaf(
+    input: &elements::pset::Input,
+) -> Result<(&elements::taproot::ControlBlock, &elements::Script)> {
+    let output = &input
+        .witness_utxo
+        .as_ref()
+        .context("Missing witness UTXO")?
+        .script_pubkey;
+    ensure!(output.is_v1_p2tr(), "Input is not P2TR");
+    let key = elements::schnorr::TweakedPublicKey::new(
+        elements::secp256k1_zkp::XOnlyPublicKey::from_slice(&output.as_bytes()[2..])?,
+    );
+    let secp = elements::secp256k1_zkp::Secp256k1::verification_only();
+    let mut candidates = input
+        .tap_scripts
+        .iter()
+        .filter(|(control, (script, version))| {
+            *version == elements::taproot::LeafVersion::default()
+                && control.leaf_version == *version
+                && multisig_keys(script.as_bytes()).is_ok()
+                && control.verify_taproot_commitment(&secp, &key, script)
+        });
+    let (control, (script, _)) = candidates
+        .next()
+        .context("No committed canonical multisig leaf")?;
+    ensure!(
+        candidates.next().is_none(),
+        "Ambiguous committed multisig leaves"
+    );
+    Ok((control, script))
 }
 
 pub fn elements_genesis(network: &str) -> Result<elements::BlockHash> {

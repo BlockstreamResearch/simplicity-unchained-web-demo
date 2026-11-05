@@ -4,6 +4,8 @@ import { DEMO_NETWORKS, transactionExplorerUrl } from "@/utils/demo";
 import {
   compile as wasmCompile,
   convert_script as wasmConvertScript,
+  encode_script as wasmEncodeScript,
+  bitcoin_approval_hash as wasmBitcoinApprovalHash,
   finalize_pset as wasmFinalizePset,
   finalize_psbt as wasmFinalizePsbt,
   sighash_pset as wasmSighashPset,
@@ -41,7 +43,7 @@ export interface CompileRequest {
 
 export interface CompileResponse {
   program_base64: string;
-  /** Commitment Merkle root the service tweaks its key with. */
+  /** Program CMR; the service commits to this together with the exact script bytes. */
   cmr_hex: string;
   witness_base64?: string;
 }
@@ -198,12 +200,26 @@ export interface SimplicitySignPsbtResponse {
 
 export interface TweakRequest {
   program: string;
-  jet_env: string;
+  jet_env: "elements" | "bitcoin";
+  redeem_script_hex: string;
 }
 
 export interface TweakResponse {
   cmr_hex: string;
   tweaked_public_key_hex: string;
+}
+
+export interface BitcoinApprovalHashRequest {
+  psbt_hex: string;
+  input_index: number;
+  cmr_hex: string;
+  redeem_script_hex: string;
+  network: string;
+}
+
+export interface BitcoinApprovalHashResponse {
+  approval_hash_hex: string;
+  cmr_hex: string;
 }
 
 class ProxyApiService {
@@ -296,6 +312,26 @@ class ProxyApiService {
         throw new Error(`Compile failed: ${error.message}`);
       }
       throw new Error(`Compile failed: ${String(error)}`);
+    }
+  }
+
+  /**
+   * Encode script bytes before requesting a script-bound service key.
+   */
+  async encodeScript(script: string): Promise<string> {
+    try {
+      return wasmEncodeScript(script);
+    } catch (error) {
+      throw new Error(`Encode script failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** Digest for Bitcoin policies using tx_approval_hash, not the Taproot sighash. */
+  async bitcoinApprovalHash(request: BitcoinApprovalHashRequest): Promise<BitcoinApprovalHashResponse> {
+    try {
+      return mapToObject<BitcoinApprovalHashResponse>(wasmBitcoinApprovalHash(request));
+    } catch (error) {
+      throw new Error(`Bitcoin approval hash failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

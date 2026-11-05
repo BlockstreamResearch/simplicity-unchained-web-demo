@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { createDemoSource, createSpendPlan, DEMO_NETWORKS, DEMO_PROGRAM_NOTES, demoProgram, recoveryScriptForKey, transactionExplorerUrl, type DemoNetwork } from "../utils/demo";
-import { assertSameProgram, prepareDemo, sendDemoTransaction, type PreparedProgram } from "../services/demoFlow";
+import { assertSameProgram, prepareAddress, prepareDemo, sendDemoTransaction, type PreparedProgram } from "../services/demoFlow";
 
 const secret = "01".padStart(64, "0");
 const txid = "ab".repeat(32);
@@ -13,7 +13,7 @@ type SigningApi = Parameters<typeof sendDemoTransaction>[2];
 function fixture(network: DemoNetwork, reject = false) {
   const source = createDemoSource("opcode", secret);
   const program: PreparedProgram = {
-    ...source, network, compiledProgramBase64: "program", compiledWitnessBase64: "witness",
+    ...source, network, compiledCmr: "ab".repeat(32), compiledProgramBase64: "program", compiledWitnessBase64: "witness",
     compiledHex: "script", compiledAddress: "address", tweakedPublicKey: "oracle", userLeafHash: "leaf",
   };
   const calls: string[] = [];
@@ -127,6 +127,10 @@ for (const network of ["bitcoin", "elements"] as const) {
       const source = createDemoSource(scenario, secret);
       const progress: string[] = [];
       const demo = await prepareDemo(network, scenario, secret, {
+        async encodeScript(script) {
+          assert.equal(script, source.bitcoinScript);
+          return "script";
+        },
         async compile(request) {
           assert.equal(request.environment, network);
           assert.equal(request.script, source.simplicityProgram);
@@ -134,7 +138,7 @@ for (const network of ["bitcoin", "elements"] as const) {
           return { program_base64: "program", cmr_hex: "AB".repeat(32), witness_base64: "witness" };
         },
         async tweak(request) {
-          assert.deepEqual(request, { program: "program", jet_env: network });
+          assert.deepEqual(request, { program: "program", jet_env: network, redeem_script_hex: "script" });
           return { cmr_hex: "ab".repeat(32), tweaked_public_key_hex: "oracle" };
         },
         async convert(request) {
@@ -205,8 +209,42 @@ test("preparation stops when the service decodes a different program than the br
   let converted = false;
   await assert.rejects(prepareDemo("elements", "opcode", secret, {
     async compile() { return { program_base64: "program", cmr_hex: "ab".repeat(32) }; },
+    async encodeScript() { return "script"; },
     async tweak() { return { cmr_hex: "cd".repeat(32), tweaked_public_key_hex: "oracle" }; },
     async convert() { converted = true; return { hex: "", address: "", user_leaf_hash_hex: "" }; },
   }, () => {}), /different program/);
   assert.equal(converted, false);
+});
+
+test("custom address preparation binds exact script bytes before address derivation", async () => {
+  for (const network of ["bitcoin", "elements"] as const) {
+    const calls: string[] = [];
+    for (const scriptHex of ["21aa75", "21bb75"]) {
+      const address = await prepareAddress(network, { program_base64: "program", cmr_hex: "ab".repeat(32) }, "recovery", "user", {
+        async encodeScript(script) {
+          calls.push("encode");
+          assert.equal(script, "recovery");
+          return scriptHex;
+        },
+        async tweak(request) {
+          calls.push("tweak");
+          assert.equal(request.redeem_script_hex, scriptHex);
+          return { cmr_hex: "ab".repeat(32), tweaked_public_key_hex: `key-${scriptHex}` };
+        },
+        async convert(request) {
+          calls.push("convert");
+          assert.equal(request.service_pubkey, `key-${scriptHex}`);
+          return { hex: scriptHex, address: `address-${scriptHex}`, user_leaf_hash_hex: "leaf" };
+        },
+      });
+      assert.equal(address.compiledHex, scriptHex);
+      assert.equal(address.compiledAddress, `address-${scriptHex}`);
+    }
+    assert.deepEqual(calls, ["encode", "tweak", "convert", "encode", "tweak", "convert"]);
+    await assert.rejects(prepareAddress(network, { program_base64: "program", cmr_hex: "ab".repeat(32) }, "recovery", "user", {
+      async encodeScript() { return "21aa75"; },
+      async tweak() { return { cmr_hex: "ab".repeat(32), tweaked_public_key_hex: "oracle" }; },
+      async convert() { return { hex: "21bb75", address: "bad", user_leaf_hash_hex: "leaf" }; },
+    }), /script changed/);
+  }
 });
