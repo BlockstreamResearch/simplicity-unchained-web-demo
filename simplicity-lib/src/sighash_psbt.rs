@@ -30,44 +30,21 @@ pub fn signing_hash(psbt: &Psbt, input_index: usize) -> Result<[u8; 32]> {
         .inputs
         .get(input_index)
         .context("PSBT input index out of bounds")?;
+    let (_, script) = crate::taproot::bitcoin_cooperative_leaf(input)?;
     ensure!(
-        input.tap_scripts.len() == 1,
-        "Expected one cooperative taproot leaf"
+        psbt.unsigned_tx.input[input_index].script_sig.is_empty(),
+        "Expected an empty scriptSig"
     );
-    let (control, (script, version)) = input
-        .tap_scripts
-        .iter()
-        .next()
-        .context("Missing tap_scripts")?;
-    ensure!(
-        *version == LeafVersion::TapScript,
-        "Unexpected taproot leaf version"
-    );
-    crate::taproot::multisig_keys(script.as_bytes())?;
     let prevouts = psbt
         .inputs
         .iter()
         .map(|input| input.witness_utxo.clone().context("Missing witness UTXO"))
         .collect::<Result<Vec<_>>>()?;
-    let prev_script = prevouts[input_index].script_pubkey.as_bytes();
-    ensure!(
-        prev_script.len() == 34 && prev_script[..2] == [0x51, 0x20],
-        "Input is not P2TR"
-    );
-    let output_key = elements::bitcoin::XOnlyPublicKey::from_slice(&prev_script[2..])?;
-    ensure!(
-        control.verify_taproot_commitment(
-            &elements::bitcoin::secp256k1::Secp256k1::verification_only(),
-            output_key,
-            script,
-        ),
-        "Taproot leaf does not match the funded output"
-    );
-    let tx = psbt.clone().extract_tx_unchecked_fee_rate();
-    let hash = SighashCache::new(&tx).taproot_script_spend_signature_hash(
+    let tx = &psbt.unsigned_tx;
+    let hash = SighashCache::new(tx).taproot_script_spend_signature_hash(
         input_index,
         &Prevouts::All(&prevouts),
-        elements::bitcoin::TapLeafHash::from_script(script, *version),
+        elements::bitcoin::TapLeafHash::from_script(script, LeafVersion::TapScript),
         TapSighashType::Default,
     )?;
     Ok(hash.to_byte_array())

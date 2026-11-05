@@ -35,21 +35,13 @@ pub fn execute(request: &FinalizePsbtRequest) -> Result<serde_json::Value> {
         .inputs
         .get_mut(request.input_index)
         .context("PSBT input index out of bounds")?;
-    ensure!(
-        input.tap_scripts.len() == 1,
-        "Expected one cooperative taproot leaf"
-    );
-    let (_, (script, version)) = input
-        .tap_scripts
-        .iter()
-        .next()
-        .context("Missing tap_scripts")?;
+    let (_, script) = crate::taproot::bitcoin_cooperative_leaf(input)?;
     let keys = crate::taproot::multisig_keys(script.as_bytes())?;
     ensure!(
         key == keys[1],
         "Cosign key does not match the user key in the Taproot leaf"
     );
-    let leaf_hash = TapLeafHash::from_script(script, *version);
+    let leaf_hash = TapLeafHash::from_script(script, bitcoin::taproot::LeafVersion::TapScript);
     input.tap_script_sigs.insert(
         (key, leaf_hash),
         bitcoin::taproot::Signature {
@@ -57,16 +49,12 @@ pub fn execute(request: &FinalizePsbtRequest) -> Result<serde_json::Value> {
             sighash_type: TapSighashType::Default,
         },
     );
-    let mut tx = psbt.clone().extract_tx_unchecked_fee_rate();
+    let mut tx = psbt.unsigned_tx.clone();
     for (i, input) in psbt.inputs.iter().enumerate() {
         let hash = crate::sighash_psbt::signing_hash(&psbt, i)?;
-        let (control, (script, version)) = input
-            .tap_scripts
-            .iter()
-            .next()
-            .context("Missing tap_scripts")?;
+        let (control, script) = crate::taproot::bitcoin_cooperative_leaf(input)?;
         let keys = crate::taproot::multisig_keys(script.as_bytes())?;
-        let leaf_hash = TapLeafHash::from_script(script, *version);
+        let leaf_hash = TapLeafHash::from_script(script, bitcoin::taproot::LeafVersion::TapScript);
         let service = input
             .tap_script_sigs
             .get(&(keys[0], leaf_hash))

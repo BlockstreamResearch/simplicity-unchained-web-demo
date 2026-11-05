@@ -82,12 +82,12 @@ export function DemoWorkspace() {
             <BuilderStep letter="A" title="Your key" description="Signs your half of the cooperative spend. Kept only in this tab." done={keyDone}>
               <CosignKey />
             </BuilderStep>
-            <BuilderStep letter="B" title="Program and witness" description="Pick a preset or write your own. Compiling derives the Simplicity Unchained key that commits to this exact program." done={programDone}>
+            <BuilderStep letter="B" title="Program and witness" description="Pick a preset or write your own, then compile it with its witness." done={programDone}>
               <SimplicityProgram />
             </BuilderStep>
           </div>
 
-          <BuilderStep letter="C" title="Recovery script and address" description="Combines your recovery script with the oracle + user cooperative leaf into a Taproot address." done={addressDone}>
+          <BuilderStep letter="C" title="Recovery script and address" description="Binds the service key to the compiled program and exact recovery script, then builds the Taproot address." done={addressDone}>
             <BitcoinScript />
           </BuilderStep>
 

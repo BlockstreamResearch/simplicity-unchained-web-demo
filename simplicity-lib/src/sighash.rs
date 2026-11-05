@@ -35,46 +35,21 @@ pub fn signing_hash(
         .inputs()
         .get(input_index)
         .context("PSET input index out of bounds")?;
-    ensure!(
-        input.tap_scripts.len() == 1,
-        "Expected one cooperative taproot leaf"
-    );
-    let (control, (script, version)) = input
-        .tap_scripts
-        .iter()
-        .next()
-        .context("Missing tap_scripts")?;
-    ensure!(
-        *version == LeafVersion::default(),
-        "Unexpected taproot leaf version"
-    );
-    crate::taproot::multisig_keys(script.as_bytes())?;
+    let (_, script) = crate::taproot::elements_cooperative_leaf(input)?;
     let prevouts = pset
         .inputs()
         .iter()
         .map(|input| input.witness_utxo.clone().context("Missing witness UTXO"))
         .collect::<Result<Vec<_>>>()?;
-    let prev_script = prevouts[input_index].script_pubkey.as_bytes();
-    ensure!(
-        prev_script.len() == 34 && prev_script[..2] == [0x51, 0x20],
-        "Input is not P2TR"
-    );
-    let output_key = elements::schnorr::TweakedPublicKey::new(
-        elements::secp256k1_zkp::XOnlyPublicKey::from_slice(&prev_script[2..])?,
-    );
-    ensure!(
-        control.verify_taproot_commitment(
-            &elements::secp256k1_zkp::Secp256k1::verification_only(),
-            &output_key,
-            script,
-        ),
-        "Taproot leaf does not match the funded output"
-    );
     let tx = pset.extract_tx()?;
+    ensure!(
+        tx.input[input_index].script_sig.is_empty(),
+        "Expected an empty scriptSig"
+    );
     let hash = SighashCache::new(&tx).taproot_script_spend_signature_hash(
         input_index,
         &Prevouts::All(&prevouts),
-        elements::taproot::TapLeafHash::from_script(script, *version),
+        elements::taproot::TapLeafHash::from_script(script, LeafVersion::default()),
         SchnorrSighashType::Default,
         crate::taproot::elements_genesis(network)?,
     )?;

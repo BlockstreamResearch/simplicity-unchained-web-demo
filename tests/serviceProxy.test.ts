@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { checkServiceHealth, proxyServiceRequest } from "../services/serviceProxy";
 
 const request = () => new Request("http://demo/api/proxy/tweak", {
-  method: "POST", body: JSON.stringify({ program: "program", jet_env: "bitcoin" }),
+  method: "POST", body: JSON.stringify({ program: "program", jet_env: "bitcoin", redeem_script_hex: "21aa75" }),
 });
 
 for (const endpoint of ["tweak", "sign/psbt", "sign/pset"] as const) {
@@ -11,7 +11,7 @@ for (const endpoint of ["tweak", "sign/psbt", "sign/pset"] as const) {
     const response = await proxyServiceRequest(request(), endpoint, "http://service:30431", async (url, options) => {
       assert.equal(url, `http://service:30431/simplicity-unchained/${endpoint}`);
       assert.equal(options?.method, "POST");
-      assert.deepEqual(JSON.parse(String(options?.body)), { program: "program", jet_env: "bitcoin" });
+      assert.deepEqual(JSON.parse(String(options?.body)), { program: "program", jet_env: "bitcoin", redeem_script_hex: "21aa75" });
       assert.ok(options?.signal);
       return Response.json({ result: endpoint });
     });
@@ -36,10 +36,13 @@ test("upstream JSON and plaintext errors keep their status and explanation", asy
   for (const upstream of [
     Response.json({ error: "Failed to parse program: unrecognized jet" }, { status: 400 }),
     new Response("Service maintenance", { status: 503 }),
+    Response.json({ error: "Signing capacity exhausted" }, { status: 503 }),
+    Response.json({ error: "Request deadline exceeded" }, { status: 504 }),
+    new Response("Request body exceeds 2 MiB", { status: 413 }),
   ]) {
     const response = await proxyServiceRequest(request(), "tweak", "http://service", async () => upstream);
     assert.equal(response.status, upstream.status);
-    assert.match((await response.json()).error, /unrecognized jet|Service maintenance/);
+    assert.match((await response.json()).error, /unrecognized jet|Service maintenance|capacity exhausted|deadline exceeded|2 MiB/);
   }
 });
 

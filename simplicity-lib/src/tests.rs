@@ -1,5 +1,5 @@
 use crate::{
-    compiler, converter, finalize, finalize_psbt,
+    approval_hash, compiler, converter, finalize, finalize_psbt,
     jets::{CoreExtension, ElementsExtension},
     sighash, sighash_psbt, taproot,
 };
@@ -340,6 +340,234 @@ fn custom_jet_encoding_matches_development() {
         assert_eq!(encoded::<CoreExtension>(name), expected);
         assert_eq!(encoded::<ElementsExtension>(name), expected);
     }
+    let approval = CoreExtension::parse("tx_approval_hash").unwrap();
+    assert_eq!(encoded::<CoreExtension>("tx_approval_hash"), [0xfe]);
+    assert_eq!(approval.source_ty().0, b"1");
+    assert_eq!(approval.target_ty().0, b"h");
+    assert_eq!(
+        approval.cost(),
+        simplicityhl::simplicity::Cost::from_milliweight(356)
+    );
+    assert_eq!(
+        approval.cmr().to_string(),
+        "f0ed96ee8fbf1a69beb20deb3a7a9b748bdc18da284d15438debc7d4faeb9962"
+    );
+    assert!(ElementsExtension::parse("tx_approval_hash").is_err());
+    let source = "fn main() { assert!(jet::eq_256(jet::tx_approval_hash(), witness::HASH)); }";
+    let compiled = compiler::compile_program(compiler::CompileRequest {
+        script: source.into(),
+        witness: Some(
+            serde_json::from_value(json!({
+                "HASH": { "value": format!("0x{}", "ab".repeat(32)), "type": "u256" }
+            }))
+            .unwrap(),
+        ),
+        include_debug: false,
+        environment: compiler::Environment::Bitcoin,
+    });
+    assert!(compiled.is_ok(), "{compiled:?}");
+}
+
+#[test]
+fn committed_leaf_selection_ignores_forged_decoys_and_rebuilds_witnesses() {
+    let service = keypair(1);
+    let mut psbt = bitcoin_fixture(&public_key(&service));
+    bitcoin_oracle_metadata(&mut psbt, &service);
+    let expected = finalize_bitcoin(&psbt).unwrap();
+    let (control, (script, version)) = psbt.inputs[0].tap_scripts.first_key_value().unwrap();
+    let mut forged = control.clone();
+    forged.merkle_branch = Default::default();
+    assert!(forged < *control);
+    let script = script.clone();
+    let version = *version;
+    psbt.inputs[0].tap_scripts.insert(forged, (script, version));
+    psbt.inputs[0].final_script_witness = Some(bitcoin::Witness::from_slice(&[vec![1, 2, 3]]));
+    assert_eq!(finalize_bitcoin(&psbt).unwrap(), expected);
+    let mut pset = elements_fixture(&public_key(&service));
+    elements_oracle_metadata(&mut pset, &service);
+    let expected = finalize_elements(&pset).unwrap();
+    let (control, (script, version)) = pset.inputs()[0].tap_scripts.first_key_value().unwrap();
+    let mut forged = control.clone();
+    forged.merkle_branch = Default::default();
+    assert!(forged < *control);
+    let script = script.clone();
+    let version = *version;
+    pset.inputs_mut()[0]
+        .tap_scripts
+        .insert(forged, (script, version));
+    pset.inputs_mut()[0].final_script_witness = Some(vec![vec![1, 2, 3]].into());
+    assert_eq!(finalize_elements(&pset).unwrap(), expected);
+}
+
+#[test]
+fn rejects_mismatched_leaf_versions_and_ambiguous_committed_leaves() {
+    let service = keypair(1);
+    let mut psbt = bitcoin_fixture(&public_key(&service));
+    bitcoin_oracle_metadata(&mut psbt, &service);
+    psbt.inputs[0].tap_scripts.values_mut().next().unwrap().1 =
+        bitcoin::taproot::LeafVersion::from_consensus(0xc2).unwrap();
+    assert!(finalize_bitcoin(&psbt).is_err());
+    let mut pset = elements_fixture(&public_key(&service));
+    elements_oracle_metadata(&mut pset, &service);
+    pset.inputs_mut()[0]
+        .tap_scripts
+        .values_mut()
+        .next()
+        .unwrap()
+        .1 = elements::taproot::LeafVersion::from_u8(0xc2).unwrap();
+    assert!(finalize_elements(&pset).is_err());
+
+    let secp = Secp256k1::new();
+    let service = bitcoin::PublicKey::from_str(&public_key(&service)).unwrap();
+    let user = bitcoin::PublicKey::from_str(&public_key(&keypair(2))).unwrap();
+    let leaves = [
+        taproot::multisig_script(&service, &user),
+        taproot::multisig_script(&user, &service),
+    ];
+    let spend = bitcoin::taproot::TaprootBuilder::new()
+        .add_leaf(1, leaves[0].clone())
+        .unwrap()
+        .add_leaf(1, leaves[1].clone())
+        .unwrap()
+        .finalize(
+            &secp,
+            bitcoin::XOnlyPublicKey::from_str(taproot::NUMS_KEY).unwrap(),
+        )
+        .unwrap();
+    let mut input = bitcoin::psbt::Input {
+        witness_utxo: Some(bitcoin::TxOut {
+            value: bitcoin::Amount::from_sat(5000),
+            script_pubkey: bitcoin::ScriptBuf::new_p2tr_tweaked(spend.output_key()),
+        }),
+        ..Default::default()
+    };
+    for leaf in &leaves {
+        let version = bitcoin::taproot::LeafVersion::TapScript;
+        input.tap_scripts.insert(
+            spend.control_block(&(leaf.clone(), version)).unwrap(),
+            (leaf.clone(), version),
+        );
+    }
+    assert!(
+        taproot::bitcoin_cooperative_leaf(&input)
+            .unwrap_err()
+            .to_string()
+            .contains("Ambiguous")
+    );
+
+    let leaves = leaves.map(|script| elements::Script::from(script.into_bytes()));
+    let spend = elements::taproot::TaprootBuilder::new()
+        .add_leaf(1, leaves[0].clone())
+        .unwrap()
+        .add_leaf(1, leaves[1].clone())
+        .unwrap()
+        .finalize(
+            &secp,
+            bitcoin::XOnlyPublicKey::from_str(taproot::NUMS_KEY).unwrap(),
+        )
+        .unwrap();
+    let mut input = elements::pset::Input {
+        witness_utxo: Some(elements::TxOut {
+            script_pubkey: elements::Script::new_v1_p2tr_tweaked(spend.output_key()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    for leaf in leaves {
+        let version = elements::taproot::LeafVersion::default();
+        input.tap_scripts.insert(
+            spend.control_block(&(leaf.clone(), version)).unwrap(),
+            (leaf, version),
+        );
+    }
+    assert!(
+        taproot::elements_cooperative_leaf(&input)
+            .unwrap_err()
+            .to_string()
+            .contains("Ambiguous")
+    );
+}
+
+#[test]
+fn approval_hash_binds_transaction_script_network_and_prevouts() {
+    let psbt = bitcoin_fixture(&public_key(&keypair(1)));
+    let request = approval_hash::ApprovalHashRequest {
+        psbt_hex: hex::encode(psbt.serialize()),
+        input_index: 0,
+        cmr_hex: "ab".repeat(32),
+        redeem_script_hex: "51".into(),
+        network: "testnet4".into(),
+    };
+    let original = approval_hash::execute(&request).unwrap()["approval_hash_hex"].clone();
+    for network in ["bitcoin", "testnet"] {
+        assert_ne!(
+            approval_hash::execute(&approval_hash::ApprovalHashRequest {
+                network: network.into(),
+                ..request.clone()
+            })
+            .unwrap()["approval_hash_hex"],
+            original
+        );
+    }
+    let mut changed = psbt.clone();
+    changed.unsigned_tx.output[0].value = bitcoin::Amount::from_sat(3999);
+    assert_ne!(
+        approval_hash::execute(&approval_hash::ApprovalHashRequest {
+            psbt_hex: hex::encode(changed.serialize()),
+            ..request.clone()
+        })
+        .unwrap()["approval_hash_hex"],
+        original
+    );
+    let mut changed = psbt.clone();
+    changed.inputs[0].witness_utxo.as_mut().unwrap().value = bitcoin::Amount::from_sat(4999);
+    assert_ne!(
+        approval_hash::execute(&approval_hash::ApprovalHashRequest {
+            psbt_hex: hex::encode(changed.serialize()),
+            ..request.clone()
+        })
+        .unwrap()["approval_hash_hex"],
+        original
+    );
+    assert_ne!(
+        approval_hash::execute(&approval_hash::ApprovalHashRequest {
+            redeem_script_hex: "52".into(),
+            ..request.clone()
+        })
+        .unwrap()["approval_hash_hex"],
+        original
+    );
+    assert_ne!(
+        approval_hash::execute(&approval_hash::ApprovalHashRequest {
+            cmr_hex: "cd".repeat(32),
+            ..request.clone()
+        })
+        .unwrap()["approval_hash_hex"],
+        original
+    );
+    assert!(
+        approval_hash::execute(&approval_hash::ApprovalHashRequest {
+            input_index: 1,
+            ..request.clone()
+        })
+        .is_err()
+    );
+    assert!(
+        approval_hash::execute(&approval_hash::ApprovalHashRequest {
+            network: "regtest".into(),
+            ..request.clone()
+        })
+        .is_err()
+    );
+    let mut changed = psbt;
+    changed.inputs[0].witness_utxo = None;
+    assert!(
+        approval_hash::execute(&approval_hash::ApprovalHashRequest {
+            psbt_hex: hex::encode(changed.serialize()),
+            ..request
+        })
+        .is_err()
+    );
 }
 
 #[test]
@@ -446,7 +674,12 @@ fn development_service_roundtrip() -> Result<()> {
             .map_err(anyhow::Error::msg)?;
             let tweak = service_request(
                 "tweak",
-                json!({ "program": compiled.program_base64, "jet_env": network }),
+                json!({
+                    "program": compiled.program_base64, "jet_env": network,
+                    "redeem_script_hex": hex::encode(converter::parse_human_readable(
+                        include_str!("../../public/presets/bitcoin_script/signature-recovery.bs")
+                    )?),
+                }),
             )?;
             assert_eq!(
                 tweak["cmr_hex"].as_str(),
@@ -471,20 +704,84 @@ fn development_service_roundtrip() -> Result<()> {
             });
             if network == "bitcoin" {
                 body["psbt_hex"] = hex::encode(bitcoin_fixture(service).serialize()).into();
-                let signed = service_request("sign/psbt", body)?;
+                let signed = service_request("sign/psbt", body.clone())?;
                 let psbt = bitcoin::psbt::Psbt::deserialize(&hex::decode(
                     signed["psbt_hex"].as_str().context("Missing PSBT")?,
                 )?)?;
                 assert!(finalize_bitcoin(&psbt)?["finalized"].as_bool().unwrap());
             } else {
                 body["pset_hex"] = hex::encode(serialize(&elements_fixture(service))).into();
-                let signed = service_request("sign/pset", body)?;
+                let signed = service_request("sign/pset", body.clone())?;
                 let pset = deserialize(&hex::decode(
                     signed["pset_hex"].as_str().context("Missing PSET")?,
                 )?)?;
                 assert!(finalize_elements(&pset)?["finalized"].as_bool().unwrap());
             }
+            body["redeem_script_hex"] = format!("{}61", converted.hex).into();
+            assert!(service_request(
+                if network == "bitcoin" { "sign/psbt" } else { "sign/pset" },
+                body,
+            ).is_err(), "service accepted substituted script bytes");
         }
     }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires a development service; set SIMPLICITY_TEST_SERVICE_URL"]
+fn development_service_approval_hash_roundtrip() -> Result<()> {
+    let script = "fn main() { assert!(jet::eq_256(jet::tx_approval_hash(), witness::HASH)); }";
+    let compiled = compiler::compile_program(compiler::CompileRequest {
+        script: script.into(),
+        witness: None,
+        include_debug: false,
+        environment: compiler::Environment::Bitcoin,
+    })
+    .map_err(anyhow::Error::msg)?;
+    let recovery = hex::encode(converter::parse_human_readable(include_str!(
+        "../../public/presets/bitcoin_script/signature-recovery.bs"
+    ))?);
+    let tweak = service_request(
+        "tweak",
+        json!({
+            "program": compiled.program_base64, "jet_env": "bitcoin", "redeem_script_hex": recovery,
+        }),
+    )?;
+    assert_eq!(tweak["cmr_hex"], compiled.cmr_hex);
+    let service = tweak["tweaked_public_key_hex"]
+        .as_str()
+        .context("Missing oracle key")?;
+    let psbt = bitcoin_fixture(service);
+    let digest = approval_hash::execute(&approval_hash::ApprovalHashRequest {
+        psbt_hex: hex::encode(psbt.serialize()),
+        input_index: 0,
+        cmr_hex: compiled.cmr_hex.clone(),
+        redeem_script_hex: recovery.clone(),
+        network: "testnet4".into(),
+    })?;
+    let witnessed = compiler::compile_program(compiler::CompileRequest {
+        script: script.into(), include_debug: false, environment: compiler::Environment::Bitcoin,
+        witness: Some(serde_json::from_value(json!({
+            "HASH": { "type": "u256", "value": format!("0x{}", digest["approval_hash_hex"].as_str().unwrap()) }
+        }))?),
+    }).map_err(anyhow::Error::msg)?;
+    assert_eq!(compiled.cmr_hex, witnessed.cmr_hex);
+    let mut body = json!({
+        "program": witnessed.program_base64, "witness": witnessed.witness_base64,
+        "redeem_script_hex": recovery, "user_pubkey": public_key(&keypair(2)),
+        "user_leaf_hash_hex": conversion("testnet4", service).user_leaf_hash_hex,
+        "psbt_hex": hex::encode(psbt.serialize()), "input_index": 0,
+    });
+    let signed = service_request("sign/psbt", body.clone())?;
+    let signed =
+        bitcoin::psbt::Psbt::deserialize(&hex::decode(signed["psbt_hex"].as_str().unwrap())?)?;
+    assert_eq!(finalize_bitcoin(&signed)?["finalized"], true);
+    let mut changed = psbt;
+    changed.unsigned_tx.output[0].value = bitcoin::Amount::from_sat(3999);
+    body["psbt_hex"] = hex::encode(changed.serialize()).into();
+    assert!(
+        service_request("sign/psbt", body).is_err(),
+        "transaction-independent approval accepted"
+    );
     Ok(())
 }

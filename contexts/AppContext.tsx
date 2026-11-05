@@ -14,6 +14,7 @@ interface AppState {
   simplicityProgram: string;
   witProgram: string;
   compiledProgramBase64: string;
+  compiledCmr: string;
   compiledWitnessBase64: string;
   bitcoinScript: string;
   compiledHex: string;
@@ -54,8 +55,8 @@ interface AppContextType {
   resetToGuided: () => void;
   completeTransaction: (result: TransactionResult) => void;
   clearTransaction: () => void;
-  saveSimplicityProgram: (compiledProgramBase64: string, compiledWitnessBase64: string, tweakedPublicKey?: string, includeWitnessForTransaction?: boolean) => void;
-  saveBitcoinScript: (compiledHex: string, address: string, userLeafHash: string, userPubkey: string) => void;
+  saveSimplicityProgram: (compiledProgramBase64: string, compiledWitnessBase64: string, cmr: string, includeWitnessForTransaction: boolean) => void;
+  saveBitcoinScript: (compiledHex: string, address: string, userLeafHash: string, userPubkey: string, tweakedPublicKey: string) => void;
   canSendTransaction: () => boolean;
   addLog: (message: string) => void;
   showNotification: (message: string, isError?: boolean) => void;
@@ -69,6 +70,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     simplicityProgram: "",
     witProgram: "",
     compiledProgramBase64: "",
+    compiledCmr: "",
     compiledWitnessBase64: "",
     bitcoinScript: "",
     compiledHex: "",
@@ -97,6 +99,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       simplicityProgram: code,
       programOrigin: "custom",
       compiledProgramBase64: "",
+      compiledCmr: "",
       compiledWitnessBase64: "",
       tweakedPublicKey: "",
       compiledHex: "",
@@ -116,7 +119,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       witProgram: wit,
       programOrigin: "custom",
       compiledProgramBase64: "",
+      compiledCmr: "",
       compiledWitnessBase64: "",
+      tweakedPublicKey: "",
+      compiledHex: "",
+      compiledAddress: "",
+      userLeafHash: "",
+      compiledUserPubkey: "",
+      savedBitcoinScript: false,
+      transactionResult: null,
       savedSimplicityProgram: false,
       compiledWithWitnessForTransaction: false,
     }));
@@ -126,6 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       bitcoinScript: script,
+      tweakedPublicKey: "",
       programOrigin: "custom",
       compiledHex: "",
       compiledAddress: "",
@@ -143,6 +155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       inputIndex: index,
       cosignSecretKey: key,
       ...(key !== prev.cosignSecretKey ? {
+        tweakedPublicKey: "",
         compiledHex: "",
         compiledAddress: "",
         userLeafHash: "",
@@ -158,6 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       network,
       compiledProgramBase64: "",
+      compiledCmr: "",
       compiledWitnessBase64: "",
       savedSimplicityProgram: false,
       compiledWithWitnessForTransaction: false,
@@ -182,6 +196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       programOrigin: "guided",
       compiledProgramBase64: "",
+      compiledCmr: "",
       compiledWitnessBase64: "",
       tweakedPublicKey: "",
       compiledHex: "",
@@ -220,32 +235,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, transactionResult: null }));
   }, []);
 
-  const saveSimplicityProgram = (compiledProgramBase64: string, compiledWitnessBase64: string, tweakedPublicKey?: string, includeWitnessForTransaction?: boolean) => {
+  const saveSimplicityProgram = (compiledProgramBase64: string, compiledWitnessBase64: string, cmr: string, includeWitnessForTransaction: boolean) => {
     if (state.simplicityProgram.trim() && compiledProgramBase64) {
       setState((prev) => ({
         ...prev,
         compiledProgramBase64,
         compiledWitnessBase64,
-        tweakedPublicKey: tweakedPublicKey || "",
-        ...(tweakedPublicKey !== prev.tweakedPublicKey ? {
-          compiledHex: "",
-          compiledAddress: "",
-          userLeafHash: "",
-          compiledUserPubkey: "",
-          savedBitcoinScript: false,
-        } : {}),
+        compiledCmr: cmr,
+        tweakedPublicKey: "",
+        compiledHex: "",
+        compiledAddress: "",
+        userLeafHash: "",
+        compiledUserPubkey: "",
+        savedBitcoinScript: false,
         savedSimplicityProgram: true,
         compiledWithWitnessForTransaction: includeWitnessForTransaction || false,
       }));
-      const logMessage = tweakedPublicKey 
-        ? `Simplicity program compiled and saved successfully. Simplicity Unchained key: ${tweakedPublicKey}`
-        : "Simplicity program compiled and saved successfully";
-      addLog(logMessage);
+      addLog("Simplicity program compiled. Build the recovery script to derive its script-bound service key.");
       showNotification("Simplicity program compiled and saved successfully");
     }
   };
 
-  const saveBitcoinScript = (compiledHex: string, address: string, userLeafHash: string, userPubkey: string) => {
+  const saveBitcoinScript = (compiledHex: string, address: string, userLeafHash: string, userPubkey: string, tweakedPublicKey: string) => {
     if (state.bitcoinScript.trim() && compiledHex && address) {
       setState((prev) => ({
         ...prev,
@@ -253,6 +264,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         compiledAddress: address,
         userLeafHash,
         compiledUserPubkey: userPubkey,
+        tweakedPublicKey,
         savedBitcoinScript: true,
       }));
       addLog(`Bitcoin script compiled - Address: ${address}`);

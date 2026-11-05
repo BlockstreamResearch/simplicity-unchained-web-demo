@@ -39,21 +39,13 @@ pub fn execute(request: &FinalizeRequest) -> Result<serde_json::Value> {
         .inputs_mut()
         .get_mut(request.input_index)
         .context("PSET input index out of bounds")?;
-    ensure!(
-        input.tap_scripts.len() == 1,
-        "Expected one cooperative taproot leaf"
-    );
-    let (_, (script, version)) = input
-        .tap_scripts
-        .iter()
-        .next()
-        .context("Missing tap_scripts")?;
+    let (_, script) = crate::taproot::elements_cooperative_leaf(input)?;
     let keys = crate::taproot::multisig_keys(script.as_bytes())?;
     ensure!(
         key == keys[1],
         "Cosign key does not match the user key in the Taproot leaf"
     );
-    let leaf_hash = TapLeafHash::from_script(script, *version);
+    let leaf_hash = TapLeafHash::from_script(script, elements::taproot::LeafVersion::default());
     input.tap_script_sigs.insert(
         (key, leaf_hash),
         SchnorrSig {
@@ -64,13 +56,9 @@ pub fn execute(request: &FinalizeRequest) -> Result<serde_json::Value> {
     let mut tx = pset.extract_tx()?;
     for (i, input) in pset.inputs().iter().enumerate() {
         let hash = crate::sighash::signing_hash(&pset, i, &request.network)?;
-        let (control, (script, version)) = input
-            .tap_scripts
-            .iter()
-            .next()
-            .context("Missing tap_scripts")?;
+        let (control, script) = crate::taproot::elements_cooperative_leaf(input)?;
         let keys = crate::taproot::multisig_keys(script.as_bytes())?;
-        let leaf_hash = TapLeafHash::from_script(script, *version);
+        let leaf_hash = TapLeafHash::from_script(script, elements::taproot::LeafVersion::default());
         let service = input
             .tap_script_sigs
             .get(&(keys[0], leaf_hash))

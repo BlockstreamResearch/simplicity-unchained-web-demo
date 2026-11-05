@@ -6,7 +6,6 @@ import { useApp } from '@/contexts/AppContext';
 import { PresetDropdown } from './PresetDropdown';
 import { InfoMenu } from './InfoMenu';
 import { proxyApi } from '@/services/proxyApi';
-import { assertSameProgram } from '@/services/demoFlow';
 import { sendGAEvent } from '@next/third-parties/google';
 
 const PRESETS = [
@@ -164,7 +163,7 @@ export function SimplicityProgram() {
     }
 
     setIsCompiling(true);
-    setOperation("preparing", "Compiling the Advanced program and requesting its Simplicity Unchained key");
+    setOperation("preparing", "Compiling the Advanced program");
     try {
       // Parse witness JSON if provided, and include it only if switch is enabled
       let witnessData: Record<string, { value: string; type: string }> | undefined = includeWitness ? {} : undefined;
@@ -188,33 +187,8 @@ export function SimplicityProgram() {
       console.log("Compiled Program (base64):", response.program_base64);
       console.log("Compiled Witness (base64):", response.witness_base64);
 
-      // Call tweak endpoint with the compiled program
-      let tweakedPublicKey = '';
-      try {
-        const tweakResponse = await proxyApi.tweak({
-          program: response.program_base64,
-          jet_env: state.network,
-        });
-        
-        console.log("Simplicity Unchained key:", tweakResponse.tweaked_public_key_hex);
-        console.log("CMR (Commitment Merkle Root):", tweakResponse.cmr_hex);
-        assertSameProgram(response.cmr_hex, tweakResponse.cmr_hex);
-        tweakedPublicKey = tweakResponse.tweaked_public_key_hex;
-      } catch (tweakError) {
-        const tweakErrorMessage = tweakError instanceof Error ? tweakError.message : "Unknown error";
-        console.error("Tweak computation error:", tweakError);
-        addLog(`Failed to compute the Simplicity Unchained key: ${tweakErrorMessage}`);
-        showNotification(`Failed to compute the Simplicity Unchained key: ${tweakErrorMessage}`, true);
-        
-        // Track tweak failure
-        sendGAEvent('event', 'error_action', {
-          location: 'simplicity_tweak',
-        });
-        return;
-      }
-
       // Save the compiled program and witness in context (this will add the success log)
-      saveSimplicityProgram(response.program_base64, response.witness_base64 || '', tweakedPublicKey, includeWitness);
+      saveSimplicityProgram(response.program_base64, response.witness_base64 || '', response.cmr_hex, includeWitness);
       
       // Track successful compilation
       sendGAEvent('event', 'success_action', {
@@ -382,7 +356,7 @@ export function SimplicityProgram() {
             disabled={isCompiling || !code.trim()}
             className="bg-brand rounded-md px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isCompiling ? "Compiling…" : "Compile and derive Simplicity Unchained key"}
+            {isCompiling ? "Compiling…" : "Compile program and witness"}
           </button>
           <label className="flex items-center gap-2 text-xs font-medium text-muted cursor-pointer hover:text-ink transition-colors">
             <span>Include witness</span>
@@ -418,9 +392,9 @@ export function SimplicityProgram() {
             </svg>
           )}
         </div>
-        {state.savedSimplicityProgram && state.tweakedPublicKey && (
+        {state.savedSimplicityProgram && state.compiledCmr && (
           <p className="break-all rounded-lg bg-success-tint p-3 font-mono text-xs text-ink">
-            <span className="mr-2 font-sans font-medium text-success">Simplicity Unchained key for this program</span>{state.tweakedPublicKey}
+            <span className="mr-2 font-sans font-medium text-success">Program CMR</span>{state.compiledCmr}
           </p>
         )}
       </div>
