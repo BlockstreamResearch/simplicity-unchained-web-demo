@@ -3,23 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "prepare:editor": "node scripts/prepare-editor.mjs",
+    "predev": "pnpm prepare:editor",
+    "dev": "next dev --hostname 0.0.0.0",
+    "prebuild": "pnpm prepare:editor",
     "build": "next build",
     "start": "next start",
     "test": "pnpm test:frontend && pnpm test:rust",
-    "test:frontend": "tsx --test tests/*.test.ts",
-    "test:rust": "cargo test --manifest-path simplicity-lib/Cargo.toml --locked",
-    "build:wasm": "wasm-pack build simplicity-lib --target bundler --release -- --locked"
+    "check:policy-backend": "node scripts/check-policy-backend.mjs",
+    "test:frontend": "pnpm check:policy-backend && tsx --test tests/*.test.ts",
+    "test:rust": "pnpm check:policy-backend && cargo test --manifest-path simplicity-lib/Cargo.toml --locked",
+    "build:wasm": "pnpm check:policy-backend && wasm-pack build simplicity-lib --target bundler --release -- --locked"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@next/third-parties": "^16.1.6",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
-    "@types/react-syntax-highlighter": "^15.5.13",
+    "monaco-editor": "^0.57.0",
     "next": "16.1.2",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "react-syntax-highlighter": "^16.1.0"
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

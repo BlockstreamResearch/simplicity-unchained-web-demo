@@ -7,13 +7,27 @@ use simplicityhl::{
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
+#[cfg(test)]
 use crate::jets::{CoreExtensionHinter, ElementsExtensionHinter};
+use crate::policy_jets::BitcoinPolicyHinter;
 
 #[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum Environment {
     Elements,
     Bitcoin,
+}
+
+#[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum Profile {
+    #[cfg(test)]
+    #[serde(rename = "legacy")]
+    Legacy,
+    #[default]
+    #[serde(rename = "bitcoin-policy-v1")]
+    BitcoinPolicy,
+    #[serde(rename = "liquid-policy-v1")]
+    LiquidPolicy,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,10 +38,12 @@ pub struct CompileRequest {
     pub include_debug: bool,
     #[serde(default = "default_environment")]
     pub environment: Environment,
+    #[serde(default)]
+    pub profile: Profile,
 }
 
 fn default_environment() -> Environment {
-    Environment::Elements
+    Environment::Bitcoin
 }
 
 #[derive(Debug, Serialize)]
@@ -56,9 +72,25 @@ pub fn compile(request_json: JsValue) -> Result<JsValue, JsValue> {
 }
 
 pub fn compile_program(request: CompileRequest) -> Result<CompileResponse, String> {
-    match request.environment {
-        Environment::Elements => compile_with(Box::new(ElementsExtensionHinter), request),
-        Environment::Bitcoin => compile_with(Box::new(CoreExtensionHinter), request),
+    match (request.environment, request.profile) {
+        #[cfg(test)]
+        (Environment::Elements, Profile::Legacy) => {
+            compile_with(Box::new(ElementsExtensionHinter), request)
+        }
+        #[cfg(test)]
+        (Environment::Bitcoin, Profile::Legacy) => {
+            compile_with(Box::new(CoreExtensionHinter), request)
+        }
+        (Environment::Bitcoin, Profile::BitcoinPolicy) => {
+            compile_with(Box::new(BitcoinPolicyHinter), request)
+        }
+        (Environment::Elements, Profile::LiquidPolicy) => {
+            compile_with(Box::new(crate::liquid_policy_jets::LiquidPolicyHinter), request)
+        }
+        (Environment::Bitcoin, Profile::LiquidPolicy) => Err("liquid-policy-v1 requires the Elements environment".into()),
+        (Environment::Elements, Profile::BitcoinPolicy) => Err(
+            "bitcoin-policy-v1 is a Bitcoin-only profile; select the Bitcoin environment".into(),
+        ),
     }
 }
 

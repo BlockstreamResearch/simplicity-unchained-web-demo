@@ -5,5 +5,5 @@ import { __wbg_set_wasm } from "./simplicity_lib_bg.js";
 __wbg_set_wasm(wasm);
 wasm.__wbindgen_start();
 export {
-    bitcoin_approval_hash, compile, convert_script, create_psbt, create_pset, encode_script, finalize_psbt, finalize_pset, sighash_psbt, sighash_pset
+    compile, convert_script, encode_script, liquid_policy_address, liquid_policy_context, liquid_policy_create_pset, liquid_policy_evaluate, liquid_policy_finalize_pset, liquid_policy_generate_blinding_key, liquid_policy_local_tweak, liquid_policy_recovery_script, liquid_policy_registry, liquid_policy_unblind_output, liquid_policy_user_sign, liquid_policy_verify_signed_pset, policy_context, policy_create_psbt, policy_finalize_psbt, policy_local_tweak, policy_registry, policy_verify_signed_psbt
 } from "./simplicity_lib_bg.js";

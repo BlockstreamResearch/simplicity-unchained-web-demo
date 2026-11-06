@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, ensure};
 use elements::bitcoin::{self, PublicKey};
+#[cfg(test)]
 use std::str::FromStr;
 
 pub const NUMS_KEY: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
@@ -60,6 +61,7 @@ pub fn bitcoin_cooperative_leaf(
     Ok((control, script))
 }
 
+#[cfg(test)]
 pub fn elements_cooperative_leaf(
     input: &elements::pset::Input,
 ) -> Result<(&elements::taproot::ControlBlock, &elements::Script)> {
@@ -92,6 +94,7 @@ pub fn elements_cooperative_leaf(
     Ok((control, script))
 }
 
+#[cfg(test)]
 pub fn elements_genesis(network: &str) -> Result<elements::BlockHash> {
     Ok(elements::BlockHash::from_str(match network {
         "liquid" => "1466275836220db2944ca059a3a10ef6fd2ea684b0688d2c379296888a206003",

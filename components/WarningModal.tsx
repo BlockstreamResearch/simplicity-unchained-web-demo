@@ -1,22 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
+import Link from "next/link";
+
+function subscribe(listener: () => void) {
+  window.addEventListener("storage", listener);
+  window.addEventListener("simplicity-warning-accepted", listener);
+  return () => {
+    window.removeEventListener("storage", listener);
+    window.removeEventListener("simplicity-warning-accepted", listener);
+  };
+}
 
 export function WarningModal() {
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    // Check if user has seen the warning before
-    const hasSeenWarning = localStorage.getItem("hasSeenSecurityWarning");
-    
-    if (!hasSeenWarning) {
-      setIsOpen(true);
-    }
-  }, []);
-
+  const isOpen = useSyncExternalStore(subscribe, () => localStorage.getItem("hasSeenSecurityWarning") !== "true", () => false);
   const handleAccept = () => {
     localStorage.setItem("hasSeenSecurityWarning", "true");
-    setIsOpen(false);
+    window.dispatchEvent(new Event("simplicity-warning-accepted"));
   };
 
   if (!isOpen) return null;
@@ -52,13 +52,13 @@ export function WarningModal() {
         <div className="mb-5 rounded-xl bg-surface p-4">
           <div className="space-y-2 text-sm text-muted">
             <p>
-              This is a demonstration application operating on <strong className="text-ink">Liquid Testnet</strong> and <strong className="text-ink">Bitcoin Testnet4</strong>.
+              This is an experimental testnet demo. Use <strong className="text-ink">disposable keys and testnet coins only</strong>.
             </p>
             <p>
-              <strong className="text-ink">NEVER</strong> use your actual secret keys. This is a demo environment where keys are used for demonstration purposes only. Your keys are <strong className="text-ink">NOT SECURE</strong> in this environment.
+              Keys stay in this tab. Back them up before funding; losing them can lose your coins.
             </p>
             <p>
-              It's better to get UTXOs from faucets and never, under any condition, use your real secret keys.
+              <Link href="/docs" target="_blank" rel="noopener noreferrer" className="text-brand underline">Read the policy guide</Link>
             </p>
           </div>
         </div>

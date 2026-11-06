@@ -5,7 +5,6 @@ use elements::bitcoin::{
     secp256k1::{Message, Secp256k1, schnorr::Signature},
 };
 use serde::Deserialize;
-use wasm_bindgen::prelude::*;
 
 #[derive(Deserialize)]
 pub struct FinalizePsbtRequest {
@@ -13,15 +12,6 @@ pub struct FinalizePsbtRequest {
     pub input_index: usize,
     pub signature_hex: String,
     pub public_key_hex: String,
-}
-
-#[wasm_bindgen]
-pub fn finalize_psbt(request_json: JsValue) -> Result<JsValue, JsValue> {
-    let request: FinalizePsbtRequest = serde_wasm_bindgen::from_value(request_json)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse request: {e}")))?;
-    let result = execute(&request).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    serde_wasm_bindgen::to_value(&result)
-        .map_err(|e| JsValue::from_str(&format!("Failed to serialize response: {e}")))
 }
 
 pub fn execute(request: &FinalizePsbtRequest) -> Result<serde_json::Value> {

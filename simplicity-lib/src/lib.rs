@@ -1,24 +1,30 @@
 pub mod compiler;
 pub mod converter;
-pub mod create_psbt;
-pub mod create_pset;
-pub mod finalize;
-pub mod finalize_psbt;
+#[cfg(test)]
+mod create_psbt;
+#[cfg(test)]
+mod create_pset;
+#[cfg(test)]
+mod finalize;
+mod finalize_psbt;
 pub mod jets;
-pub mod sighash;
-pub mod sighash_psbt;
+pub mod policy;
+pub mod policy_jets;
+pub mod liquid_policy_jets;
+pub mod liquid_policy;
+#[cfg(test)]
+mod liquid_policy_tests;
+#[cfg(test)]
+mod policy_tests;
+#[cfg(test)]
+mod sighash;
+mod sighash_psbt;
 mod taproot;
 #[cfg(test)]
 mod tests;
 
 // Re-export main functions for easier access
-pub use approval_hash::bitcoin_approval_hash;
 pub use compiler::compile;
 pub use converter::{convert_script, encode_script};
-pub use create_psbt::create_psbt;
-pub use create_pset::create_pset;
-pub use finalize::finalize_pset;
-pub use finalize_psbt::finalize_psbt;
-pub use sighash::sighash_pset;
-pub use sighash_psbt::sighash_psbt;
-pub mod approval_hash;
+#[cfg(test)]
+mod approval_hash;

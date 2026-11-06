@@ -2,18 +2,6 @@
  * @param {any} request_json
  * @returns {any}
  */
-export function bitcoin_approval_hash(request_json) {
-    const ret = wasm.bitcoin_approval_hash(request_json);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {any} request_json
- * @returns {any}
- */
 export function compile(request_json) {
     const ret = wasm.compile(request_json);
     if (ret[2]) {
@@ -28,30 +16,6 @@ export function compile(request_json) {
  */
 export function convert_script(request_json) {
     const ret = wasm.convert_script(request_json);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {any} request_json
- * @returns {any}
- */
-export function create_psbt(request_json) {
-    const ret = wasm.create_psbt(request_json);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {any} request_json
- * @returns {any}
- */
-export function create_pset(request_json) {
-    const ret = wasm.create_pset(request_json);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -84,11 +48,11 @@ export function encode_script(script) {
 }
 
 /**
- * @param {any} request_json
+ * @param {any} request
  * @returns {any}
  */
-export function finalize_psbt(request_json) {
-    const ret = wasm.finalize_psbt(request_json);
+export function liquid_policy_address(request) {
+    const ret = wasm.liquid_policy_address(request);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -96,11 +60,11 @@ export function finalize_psbt(request_json) {
 }
 
 /**
- * @param {any} request_json
+ * @param {any} request
  * @returns {any}
  */
-export function finalize_pset(request_json) {
-    const ret = wasm.finalize_pset(request_json);
+export function liquid_policy_context(request) {
+    const ret = wasm.liquid_policy_context(request);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -108,11 +72,11 @@ export function finalize_pset(request_json) {
 }
 
 /**
- * @param {any} request_json
+ * @param {any} request
  * @returns {any}
  */
-export function sighash_psbt(request_json) {
-    const ret = wasm.sighash_psbt(request_json);
+export function liquid_policy_create_pset(request) {
+    const ret = wasm.liquid_policy_create_pset(request);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -120,11 +84,178 @@ export function sighash_psbt(request_json) {
 }
 
 /**
- * @param {any} request_json
+ * @param {any} request
  * @returns {any}
  */
-export function sighash_pset(request_json) {
-    const ret = wasm.sighash_pset(request_json);
+export function liquid_policy_evaluate(request) {
+    const ret = wasm.liquid_policy_evaluate(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function liquid_policy_finalize_pset(request) {
+    const ret = wasm.liquid_policy_finalize_pset(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @returns {any}
+ */
+export function liquid_policy_generate_blinding_key() {
+    const ret = wasm.liquid_policy_generate_blinding_key();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function liquid_policy_local_tweak(request) {
+    const ret = wasm.liquid_policy_local_tweak(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {string} script
+ * @returns {any}
+ */
+export function liquid_policy_recovery_script(script) {
+    const ptr0 = passStringToWasm0(script, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.liquid_policy_recovery_script(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @returns {any}
+ */
+export function liquid_policy_registry() {
+    const ret = wasm.liquid_policy_registry();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function liquid_policy_unblind_output(request) {
+    const ret = wasm.liquid_policy_unblind_output(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function liquid_policy_user_sign(request) {
+    const ret = wasm.liquid_policy_user_sign(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function liquid_policy_verify_signed_pset(request) {
+    const ret = wasm.liquid_policy_verify_signed_pset(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function policy_context(request) {
+    const ret = wasm.policy_context(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function policy_create_psbt(request) {
+    const ret = wasm.policy_create_psbt(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function policy_finalize_psbt(request) {
+    const ret = wasm.policy_finalize_psbt(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function policy_local_tweak(request) {
+    const ret = wasm.policy_local_tweak(request);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @returns {any}
+ */
+export function policy_registry() {
+    const ret = wasm.policy_registry();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} request
+ * @returns {any}
+ */
+export function policy_verify_signed_psbt(request) {
+    const ret = wasm.policy_verify_signed_psbt(request);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -217,6 +348,14 @@ export function __wbg_call_389efe28435a9388() { return handleError(function (arg
     const ret = arg0.call(arg1);
     return ret;
 }, arguments); }
+export function __wbg_call_4708e0c13bdc8e95() { return handleError(function (arg0, arg1, arg2) {
+    const ret = arg0.call(arg1, arg2);
+    return ret;
+}, arguments); }
+export function __wbg_crypto_86f2631e91b51511(arg0) {
+    const ret = arg0.crypto;
+    return ret;
+}
 export function __wbg_done_57b39ecd9addfe81(arg0) {
     const ret = arg0.done;
     return ret;
@@ -225,6 +364,9 @@ export function __wbg_entries_58c7934c745daac7(arg0) {
     const ret = Object.entries(arg0);
     return ret;
 }
+export function __wbg_getRandomValues_b3f15fcbfabb0f8b() { return handleError(function (arg0, arg1) {
+    arg0.getRandomValues(arg1);
+}, arguments); }
 export function __wbg_get_9b94d73e6221f75c(arg0, arg1) {
     const ret = arg0[arg1 >>> 0];
     return ret;
@@ -277,6 +419,10 @@ export function __wbg_length_35a7bace40f36eac(arg0) {
     const ret = arg0.length;
     return ret;
 }
+export function __wbg_msCrypto_d562bbe83e0d4b91(arg0) {
+    const ret = arg0.msCrypto;
+    return ret;
+}
 export function __wbg_new_361308b2356cecd0() {
     const ret = new Object();
     return ret;
@@ -293,6 +439,14 @@ export function __wbg_new_dd2b680c8bf6ae29(arg0) {
     const ret = new Uint8Array(arg0);
     return ret;
 }
+export function __wbg_new_no_args_1c7c842f08d00ebb(arg0, arg1) {
+    const ret = new Function(getStringFromWasm0(arg0, arg1));
+    return ret;
+}
+export function __wbg_new_with_length_a2c39cbe88fd8ff1(arg0) {
+    const ret = new Uint8Array(arg0 >>> 0);
+    return ret;
+}
 export function __wbg_next_3482f54c49e8af19() { return handleError(function (arg0) {
     const ret = arg0.next();
     return ret;
@@ -301,9 +455,24 @@ export function __wbg_next_418f80d8f5303233(arg0) {
     const ret = arg0.next;
     return ret;
 }
+export function __wbg_node_e1f24f89a7336c2e(arg0) {
+    const ret = arg0.node;
+    return ret;
+}
+export function __wbg_process_3975fd6c72f520aa(arg0) {
+    const ret = arg0.process;
+    return ret;
+}
 export function __wbg_prototypesetcall_bdcdcc5842e4d77d(arg0, arg1, arg2) {
     Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
 }
+export function __wbg_randomFillSync_f8c153b79f285817() { return handleError(function (arg0, arg1) {
+    arg0.randomFillSync(arg1);
+}, arguments); }
+export function __wbg_require_b74f47fc2d022fd6() { return handleError(function () {
+    const ret = module.require;
+    return ret;
+}, arguments); }
 export function __wbg_set_1eb0999cf5d27fc8(arg0, arg1, arg2) {
     const ret = arg0.set(arg1, arg2);
     return ret;
@@ -314,8 +483,32 @@ export function __wbg_set_3f1d0b984ed272ed(arg0, arg1, arg2) {
 export function __wbg_set_f43e577aea94465b(arg0, arg1, arg2) {
     arg0[arg1 >>> 0] = arg2;
 }
+export function __wbg_static_accessor_GLOBAL_12837167ad935116() {
+    const ret = typeof global === 'undefined' ? null : global;
+    return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+}
+export function __wbg_static_accessor_GLOBAL_THIS_e628e89ab3b1c95f() {
+    const ret = typeof globalThis === 'undefined' ? null : globalThis;
+    return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+}
+export function __wbg_static_accessor_SELF_a621d3dfbb60d0ce() {
+    const ret = typeof self === 'undefined' ? null : self;
+    return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+}
+export function __wbg_static_accessor_WINDOW_f8727f0cf888e0bd() {
+    const ret = typeof window === 'undefined' ? null : window;
+    return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+}
+export function __wbg_subarray_a96e1fef17ed23cb(arg0, arg1, arg2) {
+    const ret = arg0.subarray(arg1 >>> 0, arg2 >>> 0);
+    return ret;
+}
 export function __wbg_value_0546255b415e96c1(arg0) {
     const ret = arg0.value;
+    return ret;
+}
+export function __wbg_versions_4e31226f5e8dc909(arg0) {
+    const ret = arg0.versions;
     return ret;
 }
 export function __wbindgen_cast_0000000000000001(arg0) {
@@ -329,11 +522,16 @@ export function __wbindgen_cast_0000000000000002(arg0) {
     return ret;
 }
 export function __wbindgen_cast_0000000000000003(arg0, arg1) {
+    // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
+    const ret = getArrayU8FromWasm0(arg0, arg1);
+    return ret;
+}
+export function __wbindgen_cast_0000000000000004(arg0, arg1) {
     // Cast intrinsic for `Ref(String) -> Externref`.
     const ret = getStringFromWasm0(arg0, arg1);
     return ret;
 }
-export function __wbindgen_cast_0000000000000004(arg0) {
+export function __wbindgen_cast_0000000000000005(arg0) {
     // Cast intrinsic for `U64 -> Externref`.
     const ret = BigInt.asUintN(64, arg0);
     return ret;

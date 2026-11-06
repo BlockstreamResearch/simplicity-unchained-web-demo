@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Simplicity Unchained Web Demo",
-  description: "Live testnet demo of Simplicity programs authorizing Bitcoin and Liquid transactions",
+  title: "Simplicity Unchained",
+  description: "Executable spending policies with Simplicity. Explore verified transaction approvals on Bitcoin and Liquid.",
 };
 
 export default function RootLayout({

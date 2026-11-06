@@ -35,6 +35,10 @@ pub fn convert_script(request_json: JsValue) -> Result<JsValue, JsValue> {
     let request: ConvertRequest = serde_wasm_bindgen::from_value(request_json)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse request: {}", e)))?;
 
+    if !matches!(request.network.as_str(), "bitcoin" | "testnet" | "testnet4") {
+        return Err(JsValue::from_str("Only Bitcoin networks are supported by the policy workflow"));
+    }
+
     let result = convert(&request);
 
     match result {

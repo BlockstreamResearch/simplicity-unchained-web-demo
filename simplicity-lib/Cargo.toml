@@ -20,6 +20,7 @@ elements = { version = "0.27.0", default-features = false, features = ["serde"] 
 hex = "0.4.3"
 base64 = "0.21"
 simplicityhl = "0.8.0"
+simplicity-unchained-policy = { path = "../../simplicity-unchained/policy" }
 
 [dependencies.web-sys]
 version = "0.3"

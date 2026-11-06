@@ -364,6 +364,7 @@ fn custom_jet_encoding_matches_development() {
         ),
         include_debug: false,
         environment: compiler::Environment::Bitcoin,
+        profile: compiler::Profile::Legacy,
     });
     assert!(compiled.is_ok(), "{compiled:?}");
 }
@@ -601,6 +602,7 @@ fn compiles_all_presets_for_supported_environments() {
                 witness: Some(serde_json::from_str(&witness).unwrap()),
                 include_debug: false,
                 environment,
+                profile: compiler::Profile::Legacy,
             });
             assert!(
                 result.is_ok(),
@@ -611,7 +613,7 @@ fn compiles_all_presets_for_supported_environments() {
     }
 }
 
-fn service_request(endpoint: &str, body: Value) -> Result<Value> {
+pub(super) fn service_request(endpoint: &str, body: Value) -> Result<Value> {
     let base = std::env::var("SIMPLICITY_TEST_SERVICE_URL")
         .context("Set SIMPLICITY_TEST_SERVICE_URL to a running development service")?;
     let mut child = Command::new("curl")
@@ -670,6 +672,7 @@ fn development_service_roundtrip() -> Result<()> {
                 witness: Some(serde_json::from_str(witness)?),
                 include_debug: false,
                 environment,
+                profile: compiler::Profile::Legacy,
             })
             .map_err(anyhow::Error::msg)?;
             let tweak = service_request(
@@ -736,6 +739,7 @@ fn development_service_approval_hash_roundtrip() -> Result<()> {
         witness: None,
         include_debug: false,
         environment: compiler::Environment::Bitcoin,
+        profile: compiler::Profile::Legacy,
     })
     .map_err(anyhow::Error::msg)?;
     let recovery = hex::encode(converter::parse_human_readable(include_str!(
@@ -761,6 +765,7 @@ fn development_service_approval_hash_roundtrip() -> Result<()> {
     })?;
     let witnessed = compiler::compile_program(compiler::CompileRequest {
         script: script.into(), include_debug: false, environment: compiler::Environment::Bitcoin,
+        profile: compiler::Profile::Legacy,
         witness: Some(serde_json::from_value(json!({
             "HASH": { "type": "u256", "value": format!("0x{}", digest["approval_hash_hex"].as_str().unwrap()) }
         }))?),
