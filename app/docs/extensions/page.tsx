@@ -111,7 +111,7 @@ export default function ExtensionsPage() {
       <h2 className="text-xl font-semibold">2. Implement the frame function</h2>
       <p className="text-sm leading-relaxed text-muted">Each jet is an <code>unsafe extern &quot;C&quot;</code> function: read the declared source bits, write the declared target bits, and return <code>false</code> to fail evaluation. This example reads the redeem-script length and writes a big-endian 16-bit result. It consumes zero source bits because its source is unit.</p>
       <CodeBlock title="Single-jet variant of plugin_tests/script_jets/src/lib.rs" code={pluginSource} />
-      <p className="text-sm leading-relaxed text-muted">The ABI passes <code>JetEnv</code> with <code>redeem_script</code>, the consensus-serialized spending <code>tx</code> and <code>input_index</code>. These pointers are valid only during the call. They are not a verified PSBT/PSET disclosure context or a chain-state oracle.</p>
+      <p className="text-sm leading-relaxed text-muted">The ABI passes <code>JetEnv</code> with <code>redeem_script</code>, the consensus-serialized spending <code>tx</code> and <code>input_index</code>. These pointers are valid only during the call.</p>
       <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted">
         <li>Frames are not bounds-checked. Respect the declared bit widths and never retain frame or environment pointers.</li>
         <li>Use <code>read_bits</code> and <code>write_bits</code> with the matching big-endian layout. Return <code>false</code> for invalid values instead of panicking across the C ABI.</li>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/Wordmark";
+import { QuickSetup } from "@/components/QuickSetup";
 import { buttonPrimary } from "@/components/ui";
 
 const repository = "https://github.com/BlockstreamResearch/simplicity-unchained";
@@ -55,6 +56,7 @@ export default function LandingPage() {
       <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-5 text-sm sm:gap-7">
         <a href="https://simplicity-lang.org" target="_blank" rel="noopener noreferrer" className="hover:text-brand">About Simplicity</a>
         <Link href="/docs" className="hover:text-brand">Docs</Link>
+        <a href="#quick-setup" className="hover:text-brand">Quick setup</a>
         <Link href="/demo" className={buttonPrimary}>Open demo <Arrow /></Link>
       </nav>
     </header>
@@ -70,7 +72,7 @@ export default function LandingPage() {
             <Link href="/demo" className={primary}>Try it on testnet <Arrow /></Link>
             <a href={repository} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm font-medium hover:text-brand">Explore the code <Arrow /></a>
           </div>
-          <p className="text-xs text-muted">Bitcoin Testnet4 &amp; Liquid Testnet. Open source. Experimental.</p>
+          <p className="text-xs text-muted">Bitcoin Testnet4 &amp; Liquid Testnet. Open source. Testnet.</p>
         </div>
         <PolicyPreview />
       </section>
@@ -132,11 +134,13 @@ export default function LandingPage() {
           <div className="space-y-4"><p className={sectionLabel}>Extend Simplicity Unchained</p><h2 className={heading}>Your own logic.<br />Your own jets.</h2></div>
           <div className="space-y-5">
             <p className="text-base leading-relaxed text-muted">Need a function beyond the built-in jet set? Write an extension with your own jets, define their types and execution costs, and register them with the native SU host.</p>
-            <p className="text-sm leading-relaxed text-muted">Custom extensions require a matching host and compiler integration. The web demo uses fixed, versioned policy profiles; it does not load native plugins.</p>
+            <p className="text-sm leading-relaxed text-muted">Custom extensions require a matching host and compiler integration.</p>
             <Link href="/docs/extensions" className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">Learn about jet extensions <Arrow /></Link>
           </div>
         </div>
       </section>
+
+      <QuickSetup />
 
       <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6 sm:pb-24">
         <div className="flex flex-col items-start justify-between gap-8 rounded-2xl bg-brand-tint p-7 sm:p-12 lg:flex-row lg:items-center">
