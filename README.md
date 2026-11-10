@@ -11,9 +11,12 @@ confidential, multi-asset `liquid-policy-v1` profile. These are the only demo ne
 
 ## Run locally or on your LAN
 
-Requires Node.js 20.9+, pnpm, Rust and wasm-pack.
+Requires Node.js 20.9+, Corepack, Rust and wasm-pack. Corepack uses the pnpm
+version pinned in `package.json`. Dependency build-script approvals are tracked
+in `pnpm-workspace.yaml` and used by both local and Docker installs.
 
 ```bash
+corepack enable
 pnpm install --frozen-lockfile
 pnpm build:wasm
 NEXT_PUBLIC_SIMPLICITY_SERVICE_URL=http://127.0.0.1:30431 pnpm dev
