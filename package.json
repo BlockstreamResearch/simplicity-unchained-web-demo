@@ -2,6 +2,7 @@
   "name": "simplicity-unchained-web-demo",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@12.18.0",
   "scripts": {
     "prepare:editor": "node scripts/prepare-editor.mjs",
     "predev": "pnpm prepare:editor",
