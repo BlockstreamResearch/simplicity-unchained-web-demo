@@ -1,0 +1,27 @@
+name: Publish image
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: publish-main
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'BlockstreamResearch/simplicity-unchained-web-demo'
+    permissions:
+      contents: read
+      id-token: write
+    uses: Blockstream/ci-components/.github/workflows/publish.yml@v1
+    with:
+      workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      service-account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      image: ${{ vars.IMAGE_NAME }}
+      environment: staging
+      build-arg-vars: |
+        NEXT_PUBLIC_SIMPLICITY_SERVICE_URL
+        NEXT_PUBLIC_GOOGLE_ANALYTICS_ID
