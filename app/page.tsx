@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/Wordmark";
 import { QuickSetup } from "@/components/QuickSetup";
+import { VaultExample } from "@/components/VaultExample";
 import { buttonPrimary } from "@/components/ui";
 
 const repository = "https://github.com/BlockstreamResearch/simplicity-unchained";
@@ -97,6 +98,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <VaultExample />
 
       <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="space-y-4 text-center"><p className={sectionLabel}>From policy to transaction</p><h2 className={heading}>Try a complete spend in three steps.</h2></div>
