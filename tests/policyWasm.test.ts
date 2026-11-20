@@ -6,6 +6,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { DEFAULT_POLICY_SOURCE } from "../services/policyDefaults";
 import { POLICY_EXAMPLES } from "../services/policyExamples";
 import { LIQUID_POLICY_EXAMPLES } from "../services/liquidPolicyExamples";
+import { VAULT_POLICY_SOURCE } from "../services/vaultExample";
 import { JET_DESCRIPTIONS, LIQUID_JET_DESCRIPTIONS } from "../services/jetDescriptions";
 import { approvePolicyTransaction, cosignPolicyTransaction, policyPublicKey, preparePolicyAddress, preparePolicyTransaction } from "../services/policyFlow";
 import { approveAndCosignLiquid, liquidSpendOutputs, prepareLiquidAddress, prepareLiquidSpend } from "../services/liquidPolicyFlow";
@@ -104,6 +105,13 @@ test("every selectable policy example compiles with fresh approval and every can
   for (const jet of registry.manifest.jets) {
     assert.ok(JET_DESCRIPTIONS[jet.name], `${jet.name} needs beginner-facing documentation`);
   }
+});
+
+test("landing vault policy compiles to the CMR checked against the SU evaluator", async () => {
+  const w = await wasm();
+  const compiled = w.compile({ script: VAULT_POLICY_SOURCE, environment: "bitcoin", profile: POLICY_PROFILE });
+  // Changing the policy changes this CMR; re-check the landing scenarios against the SU evaluator before updating it.
+  assert.equal(compiled instanceof Map ? compiled.get("cmr_hex") : compiled.cmr_hex, "c8c63a85c8cc4b3be6fc99b1db4968fcb9f8a3deb6d60bcd6399d3aad85f4635");
 });
 
 const bytes = (hex: string) => Buffer.from(hex, "hex");

@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import LandingPage from "../app/page";
 import ExtensionsPage, { metadata as extensionsMetadata } from "../app/docs/extensions/page";
-import { QuickSetup, setupCommands } from "../components/QuickSetup";
+import { QuickSetup, exampleConfig, pullCommand, setupCommand } from "../components/QuickSetup";
+import { VAULT_SCENARIOS, evaluateVaultScenario } from "../services/vaultExample";
 
 test("SU landing introduces both policy networks and links into the separate demo", () => {
   const html = renderToStaticMarkup(createElement(LandingPage));
@@ -28,63 +26,91 @@ test("SU landing introduces both policy networks and links into the separate dem
   assert.doesNotMatch(html, /<select|<textarea|Security Warning - Demo Environment/);
 });
 
-test("quick setup exposes the published image, persistent signer config and local API checks", () => {
+test("quick setup explains operator-provided config and exposes a minimal Docker command", () => {
   const html = renderToStaticMarkup(createElement(LandingPage));
   assert.match(html, /id="quick-setup"/);
   assert.match(html, /href="#quick-setup"/);
   assert.match(html, /Quick SU setup/);
-  assert.match(html, /base_public_key_hex/);
-  assert.match(html, /not a Bitcoin or Liquid full node/);
+  assert.match(html, /Prepare your own <code>config\.toml<\/code>/);
+  assert.match(html, /readable by container UID <code>1000<\/code>/);
+  assert.match(exampleConfig, /^bitcoin_network = "testnet4"\nliquid_network = "liquidtestnet"$/m);
+  assert.match(exampleConfig, /^# bitcoin_network = "bitcoin"\n# liquid_network = "liquid"$/m);
   assert.match(html, /ARM hosts need emulation/);
-  assert.match(html, /Back up the config/);
-  assert.match(html, /HTTPS reverse proxy/);
-  assert.match(setupCommands.provision, /ghcr\.io\/blockstreamresearch\/simplicity-unchained:v0\.1\.0-alpha\.0/);
-  assert.match(setupCommands.provision, /chown 1000:1000/);
-  assert.match(setupCommands.run, /--publish 127\.0\.0\.1:30431:30431/);
-  assert.match(setupCommands.run, /src=su-config,dst=\/app\/config,readonly/);
-  assert.match(setupCommands.run, /start --config \/app\/config\/config\.toml/);
-  for (const script of Object.values(setupCommands)) {
-    const result = spawnSync("sh", ["-n"], { input: script, encoding: "utf8" });
-    assert.equal(result.status, 0, result.stderr);
-  }
-  for (const path of ["version", "policy/bitcoin/capabilities", "policy/liquid/capabilities"]) {
-    assert.ok(setupCommands.verify.includes(`/simplicity-unchained/${path}`));
-  }
+  assert.doesNotMatch(html, /Provision once|Verify the API|set -C|umask|chown|\/dev\/urandom/);
 });
 
 test("quick setup keeps the complete commands collapsed by default", () => {
   const html = renderToStaticMarkup(createElement(QuickSetup));
   assert.equal((html.match(/<details\b/g) ?? []).length, 1);
   assert.doesNotMatch(html, /<details\b[^>]*\bopen(?:=|\s|>)/);
-  assert.match(html, /<summary\b[^>]*>Docker setup commands/);
+  assert.match(html, /<summary\b[^>]*>Docker command/);
   const details = html.match(/<details\b[\s\S]*?<\/details>/)?.[0];
   assert.ok(details);
   assert.equal((details.match(/<pre\b/g) ?? []).length, 3);
+  assert.match(details, /aria-label="Docker pull command"/);
+  assert.match(details, /aria-label="Docker run command"/);
+  assert.match(details, /aria-label="Example config\.toml"/);
+  assert.match(details, /data-token="command">docker<\/span>/);
+  assert.match(details, /data-token="command">pull<\/span>/);
+  assert.match(details, /data-token="option">--publish<\/span>/);
+  assert.match(details, /data-token="variable">\$PWD<\/span>/);
+  assert.match(details, /data-token="image">ghcr\.io\/blockstreamresearch\/simplicity-unchained/);
+  assert.match(details, /data-token="section">\[service\]<\/span>/);
+  assert.match(details, /data-token="key">private_key<\/span>/);
+  assert.match(details, /data-token="string">&quot;&lt;64-hex-private-key&gt;&quot;<\/span>/);
+  assert.match(details, /data-token="comment"># Bitcoin Testnet4<\/span>/);
   assert.match(html, /Full setup guide/);
-  assert.match(html, /Keep your existing signing key/);
 });
 
-test("setup provisioning generates a private testnet config and refuses to replace the signing key", () => {
-  const directory = mkdtempSync(join(tmpdir(), "su-setup-"));
-  const inner = setupCommands.provision.match(/"\$IMAGE" -euc '([\s\S]+)'$/)?.[1];
-  assert.ok(inner);
-  const script = `chown() { [ "$1" = "1000:1000" ] && [ "$2" = "$SU_SETUP_TEST_DIR/config.toml" ]; }\n${inner.replaceAll("/config/config.toml", '"$SU_SETUP_TEST_DIR/config.toml"')}`;
-  const env = { ...process.env, SU_SETUP_TEST_DIR: directory };
-  try {
-    const first = spawnSync("sh", ["-euc", script], { env, encoding: "utf8" });
-    assert.equal(first.status, 0, first.stderr);
-    assert.equal(first.stdout, "");
-    const configPath = join(directory, "config.toml");
-    const config = readFileSync(configPath, "utf8");
-    assert.match(config, /^\[service\]\nport = 30431\nprivate_key = "[a-f0-9]{64}"\nbitcoin_network = "testnet4"\nliquid_network = "liquidtestnet"\n$/);
-    assert.equal(statSync(configPath).mode & 0o777, 0o600);
-    const second = spawnSync("sh", ["-euc", script], { env, encoding: "utf8" });
-    assert.notEqual(second.status, 0);
-    assert.match(second.stderr, /Configuration exists; reuse it/);
-    assert.equal(readFileSync(configPath, "utf8"), config);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+test("vault section shows the policy, a co-signed withdrawal and the Script comparison", () => {
+  const html = renderToStaticMarkup(createElement(LandingPage));
+  const section = html.match(/<section id="beyond-script"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(section);
+  assert.match(section, /A vault Bitcoin Script can&#x27;t write\./);
+  assert.match(section, /data-token="keyword">fn<\/span>/);
+  assert.match(section, /data-token="function">jet::current_script_debit<\/span>/);
+  assert.match(section, /data-token="type">u64<\/span>/);
+  assert.match(section, /data-token="variable">witness::APPROVAL<\/span>/);
+  assert.match(section, /data-token="comment">\/\/ 1\. At most 50,000 sats leave/);
+  assert.equal((section.match(/aria-pressed="true"/g) ?? []).length, 1);
+  assert.equal((section.match(/aria-pressed=/g) ?? []).length, VAULT_SCENARIOS.length);
+  assert.match(section, /<strong class="font-semibold">Co-signed\.<\/strong> 50,000 sats leave; 950,000 stay in the vault\./);
+  assert.doesNotMatch(section, /bg-danger\/25/);
+  assert.match(section, /recovery leaf bypasses the policy/);
+});
+
+test("each vault scenario passes or fails exactly the policy rule it demonstrates", () => {
+  const outcomes = Object.fromEntries(VAULT_SCENARIOS.map((scenario) => [scenario.id, evaluateVaultScenario(scenario)]));
+  assert.deepEqual(Object.fromEntries(Object.entries(outcomes).map(([id, result]) => [id, result.failed])), {
+    withdraw: [], drain: [1], redirect: [1], split: [2], rush: [3],
+  });
+  assert.deepEqual([outcomes.withdraw.debit, outcomes.drain.debit, outcomes.redirect.debit, outcomes.split.debit], [50_000, 150_000, 1_000_000, 50_000]);
+  for (const result of Object.values(outcomes)) assert.equal(result.fee, 1_000);
+});
+
+test("Docker example uses the supplied config read-only and handles directory names with spaces", () => {
+  const result = spawnSync("sh", ["-eu"], {
+    input: `PWD='/tmp/my SU config'\ndocker() { printf '%s\\n' "$@"; }\n${setupCommand}`,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const args = result.stdout.trim().split("\n");
+  assert.equal(args[0], "run");
+  assert.equal(args[args.indexOf("--platform") + 1], "linux/amd64");
+  assert.equal(args[args.indexOf("--publish") + 1], "127.0.0.1:30431:30431");
+  assert.equal(args[args.indexOf("--mount") + 1], "type=bind,src=/tmp/my SU config/config.toml,dst=/app/config.toml,readonly");
+  assert.ok(args.includes("ghcr.io/blockstreamresearch/simplicity-unchained:v0.1.0-alpha.0"));
+  assert.deepEqual(args.slice(-3), ["start", "--config", "/app/config.toml"]);
+
+  const pull = spawnSync("sh", ["-eu"], {
+    input: `docker() { printf '%s\\n' "$@"; }\n${pullCommand}`,
+    encoding: "utf8",
+  });
+  assert.equal(pull.status, 0, pull.stderr);
+  const pullArgs = pull.stdout.trim().split("\n");
+  assert.deepEqual(pullArgs.slice(0, 3), ["pull", "--platform", args[args.indexOf("--platform") + 1]]);
+  assert.equal(pullArgs.length, 4);
+  assert.ok(args.includes(pullArgs[3]));
 });
 
 test("jet extensions have a standalone developer guide with navigation and browser limitations", () => {
